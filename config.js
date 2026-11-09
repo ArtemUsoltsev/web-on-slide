@@ -52,6 +52,92 @@
 
   cfg.isAllowed = function (value) { return cfg.check(value).ok; };
 
+  // ---------- Код сесії ----------
+  // Адреса може містити {код} (або {code}): тоді на слайді є окреме поле «Код сесії»,
+  // і перед новою групою тренер міняє лише код. Наприклад: https://www.menti.com/{код}
+  // Пробіли з коду прибираються: «1234 5678» → 12345678.
+  var CODE_RE = /\{(код|code)\}/gi;
+  cfg.hasCode = function (template) { CODE_RE.lastIndex = 0; return CODE_RE.test(String(template || "")); };
+  cfg.fillCode = function (template, code) {
+    return String(template || "").replace(CODE_RE, encodeURIComponent(String(code == null ? "" : code).replace(/\s+/g, "")));
+  };
+
+  // ---------- Розумні посилання ----------
+  // Звичайні адреси популярних сервісів забороняють вбудовування, а їхні embed-адреси дозволяють.
+  // Перетворення робиться під час показу, тож нове правило тут діє і для вже збережених презентацій.
+  // Кожне правило: { name, test(u: URL) -> рядок нової адреси або null }.
+  function ytStart(u) {
+    var t = u.searchParams.get("t") || u.searchParams.get("start") || "";
+    if (/^\d+$/.test(t)) return +t;
+    var m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(t);
+    if (!t || !m) return 0;
+    return (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0);
+  }
+  function ytEmbed(id, u) {
+    if (!/^[\w-]{6,20}$/.test(id)) return null;
+    var s = ytStart(u);
+    return "https://www.youtube.com/embed/" + id + (s ? "?start=" + s : "");
+  }
+  cfg.embedRules = [
+    { name: "YouTube", test: function (u) {
+      var h = u.hostname.replace(/^(www|m|music)\./, "");
+      if (h === "youtu.be") return ytEmbed(u.pathname.slice(1).split("/")[0], u);
+      if (h !== "youtube.com" && h !== "youtube-nocookie.com") return null;
+      if (u.pathname === "/watch" && u.searchParams.get("v")) return ytEmbed(u.searchParams.get("v"), u);
+      var m = /^\/(shorts|live)\/([\w-]+)/.exec(u.pathname);
+      return m ? ytEmbed(m[2], u) : null;
+    } },
+    { name: "Vimeo", test: function (u) {
+      if (u.hostname.replace(/^www\./, "") !== "vimeo.com") return null;
+      var m = /^\/(\d+)(?:\/([0-9a-f]+))?\/?$/.exec(u.pathname);
+      return m ? "https://player.vimeo.com/video/" + m[1] + (m[2] ? "?h=" + m[2] : "") : null;
+    } },
+    { name: "Google", test: function (u) {
+      if (u.hostname === "drive.google.com") {
+        var f = /^\/file\/d\/([\w-]+)\/(view|edit)/.exec(u.pathname);
+        return f ? "https://drive.google.com/file/d/" + f[1] + "/preview" : null;
+      }
+      if (u.hostname !== "docs.google.com") return null;
+      // Форма для відповідей: додаємо embedded=true (редактор форми не чіпаємо).
+      if (/^\/forms\/d\/e\/[\w-]+\/viewform/.test(u.pathname)) {
+        if (u.searchParams.get("embedded") === "true") return null;
+        u.searchParams.set("embedded", "true");
+        return u.href;
+      }
+      // Документи, таблиці, презентації: редактор → перегляд (/preview).
+      var d = /^\/(document|spreadsheets|presentation)\/d\/([\w-]+)\/(edit|view)?/.exec(u.pathname);
+      return d ? "https://docs.google.com/" + d[1] + "/d/" + d[2] + "/preview" : null;
+    } },
+    { name: "Miro", test: function (u) {
+      if (u.hostname.replace(/^www\./, "") !== "miro.com") return null;
+      var m = /^\/app\/board\/([^/]+)/.exec(u.pathname);
+      return m ? "https://miro.com/app/live-embed/" + m[1] + "/" : null;
+    } },
+    { name: "Figma", test: function (u) {
+      if (u.hostname.replace(/^www\./, "") !== "figma.com") return null;
+      if (!/^\/(file|design|proto|board|slides)\//.test(u.pathname)) return null;
+      return "https://www.figma.com/embed?embed_host=share&url=" + encodeURIComponent(u.href);
+    } },
+    { name: "Canva", test: function (u) {
+      if (u.hostname.replace(/^www\./, "") !== "canva.com") return null;
+      var m = /^\/design\/([\w-]+)\/([\w-]+\/)?(view|watch)\/?$/.exec(u.pathname);
+      if (!m || u.searchParams.has("embed")) return null;
+      return "https://www.canva.com/design/" + m[1] + "/" + (m[2] || "") + "view?embed";
+    } }
+  ];
+
+  // Повертає { url, service }: service = назва сервісу, якщо адресу перетворено, інакше null.
+  cfg.toEmbed = function (url) {
+    var u;
+    try { u = new URL(url); } catch (e) { return { url: url, service: null }; }
+    for (var i = 0; i < cfg.embedRules.length; i++) {
+      var out = null;
+      try { out = cfg.embedRules[i].test(new URL(u.href)); } catch (e2) { out = null; }
+      if (out && out !== url) return { url: out, service: cfg.embedRules[i].name };
+    }
+    return { url: url, service: null };
+  };
+
   // Повідомлення для користувача за кодом причини.
   cfg.reasonText = {
     empty: "Введіть адресу сторінки.",

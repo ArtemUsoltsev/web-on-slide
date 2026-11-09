@@ -3,27 +3,39 @@
 (function () {
   "use strict";
 
-  var KEY_URL = "url";
-  var KEY_MODE = "mode"; // "embed" (iframe) або "button" (кнопка, що відкриває вікно)
-  var KEY_SCALE = "scale"; // масштаб сторінки, 0.5–1 (1 = 100%)
-  var KEY_SCROLL = "scroll"; // "show" = показувати прокрутку; інакше прихована
+  var KEY_URL = "url";         // адреса; може містити {код} (див. config.js)
+  var KEY_MODE = "mode";       // "embed" (iframe) | "button" (кнопка, що відкриває вікно) | "qr" (лише QR-код)
+  var KEY_SCALE = "scale";     // масштаб сторінки, 0.5–1 (1 = 100%)
+  var KEY_SCROLL = "scroll";   // "show" = показувати прокрутку; інакше прихована
+  var KEY_CODE = "code";       // код сесії, що підставляється замість {код}
+  var KEY_QR = "qr";           // "corner" = QR-код адреси в куті блоку
+  var KEY_REVEAL = "reveal";   // "1" = сайт з'являється лише після кліку по заставці
+  var KEY_REVEAL_TEXT = "revealText"; // підпис на заставці
+  var KEY_REFRESH = "refresh"; // автооновлення, секунди (0 = вимкнено)
   var LOAD_TIMEOUT_MS = 10000; // через скільки показати картку «сторінка не відповідає»
+  var REFRESH_CHOICES = [0, 10, 30, 60, 300];
+  var DEFAULT_REVEAL_TEXT = "Натисніть, щоб показати";
 
   var cfg = window.WEB_ON_SLIDE_CONFIG;
 
   function $(id) { return document.getElementById(id); }
   var frame = $("frame"), frameWrap = $("frameWrap"), launch = $("launch"), setup = $("setup"), bar = $("bar");
   var loadfail = $("loadfail"), fallback = $("fallback"), fatal = $("fatal"), loading = $("loading");
-  var input = $("url"), asButton = $("asButton"), err = $("err"), warn = $("warn");
-  var scaleSel = $("scale"), allowScroll = $("allowScroll"), more = $("more");
+  var cover = $("cover"), qrCard = $("qrCard"), qrCorner = $("qrCorner");
+  var input = $("url"), codeInput = $("code"), codeRow = $("codeRow"), info = $("info"), err = $("err"), warn = $("warn");
+  var modeSel = $("mode"), scaleSel = $("scale"), refreshSel = $("refresh"), allowScroll = $("allowScroll");
+  var qrBox = $("qrCornerOn"), revealBox = $("reveal"), revealText = $("revealText"), more = $("more");
 
   var view = null;        // null (ще невідомо) | "edit" | "read" (показ слайдів)
-  var current = null;     // { url, mode, scale, scroll } — збережене налаштування цієї вставки
+  var current = null;     // збережене налаштування цієї вставки (див. readSettings)
   var editing = false;    // форма відкрита кнопкою «Змінити»; current при цьому зберігається
+  var revealed = false;   // заставку вже прибрали кліком
   var dialogSupported = false;
   var isWeb = false;
   var loadTimer = null;
+  var refreshTimer = null;
   var frameLoaded = false;
+  var qrDrawnFor = { corner: null, card: null };
 
   function hide() { for (var i = 0; i < arguments.length; i++) arguments[i].classList.add("hidden"); }
   function show() { for (var i = 0; i < arguments.length; i++) arguments[i].classList.remove("hidden"); }
@@ -32,6 +44,25 @@
     var n = parseFloat(v);
     return isFinite(n) && n >= 0.25 && n <= 1 ? n : 1;
   }
+  function cleanRefresh(v) {
+    var n = parseInt(v, 10);
+    return REFRESH_CHOICES.indexOf(n) !== -1 ? n : 0;
+  }
+  function cleanMode(v) {
+    if (v === "button" && dialogSupported) return "button";
+    if (v === "qr") return "qr";
+    return "embed";
+  }
+
+  // Адреса, яку відкривають люди (у вікні, за QR-кодом): шаблон із підставленим кодом.
+  function targetUrl(cur) { return cfg.normalize(cfg.fillCode(cur.url, cur.code)); }
+  // Адреса для блоку на слайді: та сама, але перетворена на embed-адресу, якщо сервіс відомий.
+  function frameUrl(cur) {
+    var t = targetUrl(cur);
+    var e = cfg.toEmbed(t);
+    return e.service && cfg.check(e.url).ok ? e.url : t;
+  }
+  function needsCode(cur) { return cfg.hasCode(cur.url) && !cur.code; }
 
   // Масштаб < 1: iframe більший за блок у 1/scale разів і зменшений transform-ом,
   // тож сайт розкладається як на більшому екрані й вміщується без прокрутки.
@@ -45,16 +76,64 @@
   function hostOf(url) {
     try { return new URL(url).host; } catch (e) { return ""; }
   }
+  // Коротка адреса для підпису під QR-кодом: без https:// і www.
+  function shortUrl(url) {
+    try {
+      var u = new URL(url);
+      var s = u.host.replace(/^www\./, "") + (u.pathname === "/" ? "" : u.pathname) + u.search;
+      return s.length > 60 ? s.slice(0, 57) + "…" : s;
+    } catch (e) { return url; }
+  }
+
+  // ---------- QR-код ----------
+  // Малюється локально (vendor/qrcode.js), адреса нікуди не передається.
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  function drawQr(container, text) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    if (typeof qrcode !== "function") return false;
+    var qr;
+    try {
+      qrcode.stringToBytes = qrcode.stringToBytesFuncs["UTF-8"];
+      qr = qrcode(0, "M");
+      qr.addData(text, "Byte");
+      qr.make();
+    } catch (e) { return false; }
+    var n = qr.getModuleCount(), q = 4, size = n + q * 2, d = "";
+    for (var r = 0; r < n; r++) {
+      for (var c = 0; c < n; c++) {
+        if (qr.isDark(r, c)) d += "M" + (c + q) + " " + (r + q) + "h1v1h-1z";
+      }
+    }
+    var svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + size + " " + size);
+    svg.setAttribute("shape-rendering", "crispEdges");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "QR-код: " + text);
+    var bg = document.createElementNS(SVG_NS, "rect");
+    bg.setAttribute("width", size); bg.setAttribute("height", size); bg.setAttribute("fill", "#fff");
+    var path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d); path.setAttribute("fill", "#000");
+    svg.appendChild(bg); svg.appendChild(path);
+    container.appendChild(svg);
+    return true;
+  }
+  function showQr(which, el, url) {
+    if (qrDrawnFor[which] !== url) {
+      if (!drawQr(which === "card" ? $("qrBig") : el, url)) return;
+      qrDrawnFor[which] = url;
+    }
+    show(el);
+  }
 
   // ---------- Фатальні стани: без office.js або поза PowerPoint ----------
   function showFatal(text) {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner);
     $("fatalText").textContent = text;
     $("fatalUrl").textContent = location.href;
     show(fatal);
   }
 
-  if (!cfg || typeof cfg.check !== "function") {
+  if (!cfg || typeof cfg.check !== "function" || typeof cfg.toEmbed !== "function") {
     showFatal("Не вдалося завантажити налаштування надбудови (config.js). Повідомте адміністратора.");
     return;
   }
@@ -78,6 +157,24 @@
   // ---------- Відображення ----------
   function clearLoadTimer() {
     if (loadTimer) { clearTimeout(loadTimer); loadTimer = null; }
+  }
+  function stopRefresh() {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  }
+  // Автооновлення: тихо перезавантажує сторінку без індикатора, щоб табло не блимало заставкою.
+  function startRefresh(cur) {
+    stopRefresh();
+    if (!cur.refresh) return;
+    refreshTimer = setInterval(function () {
+      if (document.hidden || !frame.getAttribute("src")) return;
+      frame.src = frame.getAttribute("src");
+    }, cur.refresh * 1000);
+  }
+
+  function unloadFrame() {
+    clearLoadTimer();
+    stopRefresh();
+    frame.removeAttribute("src");
   }
 
   function loadFrame(url) {
@@ -109,19 +206,22 @@
     hide(loadfail, loading);
   });
 
-  function setError(text) {
+  function setError(text, field) {
     err.textContent = text || "";
-    if (text) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+    input.removeAttribute("aria-invalid");
+    codeInput.removeAttribute("aria-invalid");
+    if (text) (field || input).setAttribute("aria-invalid", "true");
   }
 
   function render() {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner);
     if (view === null) return; // не малюємо нічого, поки не знаємо режим: інакше форма блимає під час показу
 
-    var showForm = !current || (editing && view === "edit");
+    var showForm = !current || needsCode(current) || (editing && view === "edit");
     if (showForm) {
+      unloadFrame();
       if (view === "edit") {
-        if (current) show($("cancelBtn")); else hide($("cancelBtn"));
+        if (current && !needsCode(current)) show($("cancelBtn")); else hide($("cancelBtn"));
         show(setup);
         // Нова вставка: одразу ставимо курсор у поле адреси.
         if (!current) input.focus();
@@ -130,21 +230,87 @@
       return;
     }
 
+    var target = targetUrl(current);
+    var reloadable = false;
     if (current.mode === "button") {
       // Режим кнопки: iframe не використовується, тож «Оновити» лише викликало б хибне «не відповідає».
-      clearLoadTimer();
-      frame.removeAttribute("src");
-      $("launchHost").textContent = hostOf(current.url);
-      hide($("reloadBtn"));
+      unloadFrame();
+      $("launchHost").textContent = hostOf(target);
       show(launch);
+    } else if (current.mode === "qr") {
+      unloadFrame();
+      $("qrUrl").textContent = shortUrl(target);
+      showQr("card", qrCard, target);
+    } else if (current.reveal && !revealed) {
+      unloadFrame();
+      $("coverBtn").textContent = current.revealText || DEFAULT_REVEAL_TEXT;
+      show(cover);
     } else {
+      var url = frameUrl(current);
       applyLook(current);
-      show($("reloadBtn"));
+      reloadable = true;
       show(frameWrap);
-      if (frame.getAttribute("src") !== current.url) loadFrame(current.url);
+      if (frame.getAttribute("src") !== url) loadFrame(url);
       else if (!frameLoaded && loadTimer) show(loading);
+      if (!refreshTimer) startRefresh(current);
     }
-    if (view === "edit") show(bar);
+    if (current.qrCorner && current.mode !== "qr") showQr("corner", qrCorner, target);
+
+    if (view === "edit") {
+      if (reloadable) show($("reloadBtn")); else hide($("reloadBtn"));
+      if (cfg.hasCode(current.url)) show($("codeBtn")); else hide($("codeBtn"));
+      show(bar);
+    }
+  }
+
+  // ---------- Форма ----------
+  function fillForm(cur) {
+    input.value = cur ? cur.url : "";
+    codeInput.value = cur ? cur.code : "";
+    modeSel.value = cur ? cur.mode : "embed";
+    scaleSel.value = String(cur ? cur.scale : 1);
+    if (scaleSel.selectedIndex < 0) scaleSel.value = "1";
+    refreshSel.value = String(cur ? cur.refresh : 0);
+    allowScroll.checked = cur ? cur.scroll === "show" : false;
+    qrBox.checked = cur ? cur.qrCorner : false;
+    revealBox.checked = cur ? cur.reveal : false;
+    revealText.value = cur && cur.revealText !== DEFAULT_REVEAL_TEXT ? cur.revealText : "";
+    // Розгортаємо «Додатково», якщо там щось змінено від типового.
+    more.open = !!(cur && (cur.mode !== "embed" || cur.scale !== 1 || cur.scroll === "show" ||
+      cur.qrCorner || cur.reveal || cur.refresh));
+    warn.textContent = "";
+    setError("");
+    updateForm();
+  }
+
+  // Показує поле коду, підказку про перетворення адреси і вмикає лише доречні для режиму параметри.
+  function updateForm() {
+    var templ = cfg.normalize(input.value);
+    var withCode = cfg.hasCode(templ);
+    if (withCode) show(codeRow); else hide(codeRow);
+
+    var mode = modeSel.value;
+    var embed = mode === "embed";
+    scaleSel.disabled = !embed;
+    refreshSel.disabled = !embed;
+    allowScroll.disabled = !embed;
+    revealBox.disabled = !embed;
+    qrBox.disabled = mode === "qr";
+    if (embed && revealBox.checked) show($("revealRow")); else hide($("revealRow"));
+    $("buttonHint").textContent = mode === "button"
+      ? "На слайді буде велика кнопка, що відкриває сайт у вікні. Для сайтів, які забороняють вбудовування."
+      : mode === "qr"
+        ? "На слайді буде лише великий QR-код і коротка адреса: учасники відкривають сайт на телефонах."
+        : "";
+
+    var res = cfg.check(cfg.fillCode(templ, withCode ? (codeInput.value || "x") : ""));
+    warn.textContent = res.ok && res.warnSecret
+      ? "Схоже, адреса містить токен або ключ. Вона збережеться у файлі презентації відкритим текстом."
+      : "";
+    var conv = res.ok && embed ? cfg.toEmbed(res.url) : { service: null };
+    info.textContent = conv.service && cfg.check(conv.url).ok
+      ? "Адресу " + conv.service + " буде показано у форматі для вбудовування."
+      : "";
   }
 
   // ---------- Запасний варіант: діалог Office ----------
@@ -174,8 +340,8 @@
   }
 
   // ---------- Ініціалізація ----------
-  Office.onReady(function (info) {
-    if (!info || !info.host) {
+  Office.onReady(function (ready) {
+    if (!ready || !ready.host) {
       showFatal("Ця сторінка працює лише всередині PowerPoint як надбудова «Веб на слайді».");
       return;
     }
@@ -185,23 +351,30 @@
     isWeb = !!(Office.PlatformType && Office.context.platform === Office.PlatformType.OfficeOnline);
     if (!dialogSupported) {
       hide($("popBtn"));
-      // Режим «кнопка» без діалогу не має сенсу: лишаємо лише вбудовування.
-      asButton.checked = false;
-      asButton.disabled = true;
+      // Режим «кнопка» без діалогу не має сенсу: лишаємо вбудовування і QR.
+      modeSel.querySelector('option[value="button"]').disabled = true;
     }
 
     applyFrameCsp();
 
     var settings = Office.context.document.settings;
     var savedUrl = settings.get(KEY_URL);
-    var savedMode = settings.get(KEY_MODE);
-    if (savedUrl && cfg.check(savedUrl).ok) {
+    var savedCode = settings.get(KEY_CODE) || "";
+    if (savedUrl && cfg.check(cfg.fillCode(savedUrl, savedCode || "x")).ok) {
       current = {
         url: savedUrl,
-        mode: savedMode === "button" && dialogSupported ? "button" : "embed",
+        code: String(savedCode),
+        mode: cleanMode(settings.get(KEY_MODE)),
         scale: cleanScale(settings.get(KEY_SCALE)),
-        scroll: settings.get(KEY_SCROLL) === "show" ? "show" : "hide"
+        scroll: settings.get(KEY_SCROLL) === "show" ? "show" : "hide",
+        qrCorner: settings.get(KEY_QR) === "corner",
+        reveal: settings.get(KEY_REVEAL) === "1",
+        revealText: String(settings.get(KEY_REVEAL_TEXT) || DEFAULT_REVEAL_TEXT),
+        refresh: cleanRefresh(settings.get(KEY_REFRESH))
       };
+      if (needsCode(current)) fillForm(current);
+    } else {
+      updateForm();
     }
 
     var activeViewSupported = !!(req && req.isSetSupported("ActiveView", "1.1"));
@@ -211,6 +384,8 @@
         render();
       });
       Office.context.document.addHandlerAsync(Office.EventType.ActiveViewChanged, function (e) {
+        // Кожен новий показ починається із заставки, навіть якщо в редакторі її вже відкрили.
+        if (e.activeView !== view) revealed = false;
         view = e.activeView;
         render();
       });
@@ -219,59 +394,78 @@
       render();
     }
 
-    // Попередження про секрети в адресі під час введення (не блокує)
     input.addEventListener("input", function () {
       if (err.textContent) setError("");
-      var res = cfg.check(input.value);
-      warn.textContent = res.ok && res.warnSecret
-        ? "Схоже, адреса містить токен або ключ. Вона збережеться у файлі презентації відкритим текстом."
-        : "";
+      updateForm();
     });
+    codeInput.addEventListener("input", function () {
+      if (err.textContent) setError("");
+      updateForm();
+    });
+    modeSel.addEventListener("change", updateForm);
+    revealBox.addEventListener("change", updateForm);
 
     setup.addEventListener("submit", function (e) {
       e.preventDefault();
-      var res = cfg.check(input.value);
+      var templ = cfg.normalize(input.value);
+      var withCode = cfg.hasCode(templ);
+      var code = withCode ? codeInput.value.replace(/\s+/g, "") : "";
+      var res = cfg.check(cfg.fillCode(templ, code || "x"));
       if (!res.ok) {
         setError(cfg.reasonText[res.reason] || "Ця адреса не дозволена.");
         input.focus();
         return;
       }
+      if (withCode && !code) {
+        setError("Введіть код сесії.", codeInput);
+        codeInput.focus();
+        return;
+      }
       setError("");
-      var mode = asButton.checked && dialogSupported ? "button" : "embed";
-      var scale = cleanScale(scaleSel.value);
-      var scroll = allowScroll.checked ? "show" : "hide";
-      settings.set(KEY_URL, res.url);
-      settings.set(KEY_MODE, mode);
-      settings.set(KEY_SCALE, scale);
-      settings.set(KEY_SCROLL, scroll);
+      var next = {
+        url: templ,
+        code: code,
+        mode: cleanMode(modeSel.value),
+        scale: cleanScale(scaleSel.value),
+        scroll: allowScroll.checked ? "show" : "hide",
+        qrCorner: qrBox.checked && modeSel.value !== "qr",
+        reveal: revealBox.checked && modeSel.value === "embed",
+        revealText: revealText.value.trim() || DEFAULT_REVEAL_TEXT,
+        refresh: cleanRefresh(refreshSel.value)
+      };
+      settings.set(KEY_URL, next.url);
+      settings.set(KEY_CODE, next.code);
+      settings.set(KEY_MODE, next.mode);
+      settings.set(KEY_SCALE, next.scale);
+      settings.set(KEY_SCROLL, next.scroll);
+      settings.set(KEY_QR, next.qrCorner ? "corner" : "");
+      settings.set(KEY_REVEAL, next.reveal ? "1" : "");
+      settings.set(KEY_REVEAL_TEXT, next.revealText);
+      settings.set(KEY_REFRESH, next.refresh);
       settings.saveAsync(function (r) {
         if (r.status !== Office.AsyncResultStatus.Succeeded) {
-          setError("Не вдалося зберегти адресу у файлі: " + (r.error && r.error.message ? r.error.message : "невідома помилка") + ". Перевірте, чи файл не відкрито лише для читання.");
+          setError("Не вдалося зберегти налаштування у файлі: " + (r.error && r.error.message ? r.error.message : "невідома помилка") + ". Перевірте, чи файл не відкрито лише для читання.");
           return;
         }
-        current = { url: res.url, mode: mode, scale: scale, scroll: scroll };
+        current = next;
         editing = false;
-        frame.removeAttribute("src");
+        revealed = false;
+        unloadFrame();
         render();
       });
     });
 
-    $("editBtn").addEventListener("click", function () {
-      input.value = current ? current.url : "";
-      asButton.checked = current ? current.mode === "button" : false;
-      scaleSel.value = String(current ? current.scale : 1);
-      if (scaleSel.selectedIndex < 0) scaleSel.value = "1";
-      allowScroll.checked = current ? current.scroll === "show" : false;
-      warn.textContent = "";
-      setError("");
-      // Розгортаємо «Додатково», якщо там щось змінено від типового.
-      more.open = !!(current && (current.mode === "button" || current.scale !== 1 || current.scroll === "show"));
+    function openForm(focusEl) {
+      fillForm(current);
       editing = true;
       render();
-      input.focus();
-    });
+      focusEl.focus();
+      if (focusEl.select) focusEl.select();
+    }
+    $("editBtn").addEventListener("click", function () { openForm(input); });
+    $("codeBtn").addEventListener("click", function () { openForm(codeInput); });
     function cancelEdit() {
-      if (!current || !editing) return;
+      if (!current || !editing || needsCode(current)) return;
       editing = false;
       setError("");
       render();
@@ -280,11 +474,12 @@
     setup.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
     });
-    $("reloadBtn").addEventListener("click", function () { if (current) loadFrame(current.url); });
-    $("loadfailRetry").addEventListener("click", function () { if (current) loadFrame(current.url); });
-    $("popBtn").addEventListener("click", function () { if (current) openInDialog(current.url); });
-    $("launchBtn").addEventListener("click", function () { if (current) openInDialog(current.url); });
-    $("loadfailOpen").addEventListener("click", function () { if (current) openInDialog(current.url); });
+    $("coverBtn").addEventListener("click", function () { revealed = true; render(); });
+    $("reloadBtn").addEventListener("click", function () { if (current) loadFrame(frameUrl(current)); });
+    $("loadfailRetry").addEventListener("click", function () { if (current) loadFrame(frameUrl(current)); });
+    $("popBtn").addEventListener("click", function () { if (current) openInDialog(targetUrl(current)); });
+    $("launchBtn").addEventListener("click", function () { if (current) openInDialog(targetUrl(current)); });
+    $("loadfailOpen").addEventListener("click", function () { if (current) openInDialog(targetUrl(current)); });
     $("fallbackClose").addEventListener("click", function () { hide(fallback); });
     $("copyBtn").addEventListener("click", function () {
       var text = $("fallbackUrl").textContent;
