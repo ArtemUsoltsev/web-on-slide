@@ -13,11 +13,11 @@
   <title>Веб на слайді</title>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <!-- ?v= підніміть після кожної зміни файлів, щоб Office не взяв стару копію з кешу -->
-  <script src="config.js?v=1.3.0"></script>
+  <script src="config.js?v=1.3.1"></script>
   <style>
     :root {
       --accent: #FFD500; --accent-hover: #ffe04d; --accent-ink: #111;
-      --bg: #f4f5f7; --card: #fff; --ink: #1d1f23; --muted: #6b7079; --line: #dfe2e7;
+      --bg: #f4f5f7; --card: #fff; --ink: #1d1f23; --muted: #6b7079; --line: #dfe2e7; --field: #8a9099;
       --danger: #c62828; --warn: #8a5a00; --radius: 12px;
     }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px "Segoe UI", system-ui, sans-serif; overflow: hidden; }
@@ -43,23 +43,34 @@
     #frame { border: 0; width: 100%; height: 100%; display: block; background: #fff; transform-origin: 0 0; }
 
     /* Екран налаштування */
-    #setup { box-sizing: border-box; height: 100%; padding: 16px; display: flex; align-items: center; justify-content: center; overflow: auto; }
-    #setup .panel { width: 100%; max-width: 560px; background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,.08); padding: 22px 24px 16px; display: flex; flex-direction: column; gap: 12px; }
+    /* Центрування через margin:auto: якщо форма вища за блок, вона не обрізається зверху, а прокручується. */
+    #setup { box-sizing: border-box; height: 100%; padding: 12px; display: flex; overflow: auto; }
+    #setup .panel { margin: auto; width: 100%; max-width: 560px; background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,.08); padding: 18px 20px 14px; display: flex; flex-direction: column; gap: 10px; }
+    #setup .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    #setup .help { font-size: 12px; color: var(--muted); text-decoration: underline; }
+    #setup .help:hover { color: var(--ink); }
     #setup h1 { margin: 0; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
     #setup h1::before { content: ""; width: 10px; height: 22px; border-radius: 3px; background: var(--accent); }
     #setup .field-label { font-weight: 600; font-size: 13px; }
     #setup input[type=text], #setup select { box-sizing: border-box; width: 100%; padding: 10px 12px; font: inherit; color: var(--ink);
-                    background: #fff; border: 1px solid var(--line); border-radius: 10px; transition: border-color .15s, box-shadow .15s; }
+                    background: #fff; border: 1px solid var(--field); border-radius: 10px; transition: border-color .15s, box-shadow .15s; }
+    #setup input[aria-invalid=true] { border-color: var(--danger); }
     #setup input[type=text]:focus, #setup select:focus { outline: none; border-color: #111; box-shadow: 0 0 0 3px rgba(255,213,0,.45); }
     #setup .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     #setup .row select { width: auto; min-width: 110px; }
     #setup label.mode { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
     #setup label.mode input { margin-top: 2px; accent-color: #111; }
-    #setup .actions { display: flex; gap: 8px; margin-top: 4px; }
+    #setup .actions { display: flex; gap: 8px; margin-top: 2px; }
+    /* Додаткові налаштування згорнуті, щоб основна дія (адреса + «Показати») вміщалася навіть у малому блоці */
+    #setup details.more { border-top: 1px solid var(--line); padding-top: 8px; }
+    #setup details.more > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--ink); width: max-content; border-radius: 4px; }
+    #setup details.more > summary:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+    #setup details.more[open] > summary { margin-bottom: 10px; }
+    #setup details.more .inner { display: flex; flex-direction: column; gap: 10px; }
     #err { color: var(--danger); min-height: 1.2em; }
     #warn { color: var(--warn); min-height: 1.2em; }
-    #err:empty, #warn:empty { min-height: 0; }
+    #err:empty, #warn:empty { display: none; }
     .hint { color: var(--muted); font-size: 12px; line-height: 1.4; }
     .credit { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted);
               display: flex; align-items: center; gap: 6px; }
@@ -72,6 +83,12 @@
     .card .url { font-size: 12px; word-break: break-all; color: var(--muted); max-width: 90%; user-select: all; }
     .card .actions { display: flex; gap: 8px; }
 
+    /* Індикатор, поки сайт завантажується */
+    #loading { position: absolute; inset: 0; background: var(--bg); color: var(--muted); }
+    .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
     /* Картка «не завантажилось» поверх iframe */
     #loadfail { position: absolute; inset: 0; background: rgba(244,245,247,.96); }
 
@@ -79,15 +96,15 @@
        Напівпрозора, яскравіша при наведенні. Займає лише місце під кнопками, щоб не перехоплювати кліки по сторінці. */
     #bar { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; padding: 3px; border-radius: 999px;
            background: rgba(20,22,26,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-           box-shadow: 0 4px 14px rgba(0,0,0,.18); opacity: .55; transition: opacity .15s; }
+           box-shadow: 0 4px 14px rgba(0,0,0,.18); opacity: .85; transition: opacity .15s; }
     #bar:hover, #bar:focus-within { opacity: 1; }
-    #bar button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 0; border-radius: 999px;
+    #bar button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 6px 11px; border: 0; border-radius: 999px;
                   background: transparent; color: #fff; font-size: 12px; line-height: 1; }
     #bar button:hover { background: rgba(255,255,255,.16); }
     #bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     #bar svg { width: 14px; height: 14px; flex: none; }
     /* У вузькому блоці лишаємо лише іконки */
-    @media (max-width: 420px) { #bar button span { display: none; } #bar button { padding: 6px; } }
+    @media (max-width: 420px) { #bar button span { display: none; } #bar button { padding: 6px 8px; } }
   </style>
 </head>
 <body>
@@ -103,6 +120,11 @@
           allow="fullscreen; autoplay; clipboard-write; gamepad"
           referrerpolicy="strict-origin-when-cross-origin"
           sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"></iframe>
+  </div>
+
+  <div id="loading" class="card hidden" role="status">
+    <div class="spinner" aria-hidden="true"></div>
+    <div id="loadingText">Завантажую сторінку…</div>
   </div>
 
   <div id="loadfail" class="card hidden">
@@ -131,29 +153,37 @@
 
   <form id="setup" class="hidden" novalidate>
     <div class="panel">
-      <h1>Веб на слайді</h1>
-      <label class="field-label" for="url">Адреса сторінки</label>
-      <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://www.menti.com/…" required>
-      <div class="row">
-        <label class="field-label" for="scale">Масштаб сторінки</label>
-        <select id="scale">
-          <option value="1">100%</option>
-          <option value="0.9">90%</option>
-          <option value="0.8">80%</option>
-          <option value="0.75">75%</option>
-          <option value="0.67">67%</option>
-          <option value="0.5">50%</option>
-        </select>
+      <div class="head">
+        <h1>Веб на слайді</h1>
+        <a class="help" href="help.html" target="_blank" rel="noopener">Довідка</a>
       </div>
-      <div class="hint">Якщо сторінка не вміщується і з'являється прокрутка, зменште масштаб: сайт «побачить» більший екран і вміститься в блок.</div>
-      <label class="mode"><input id="allowScroll" type="checkbox"> Показувати смугу прокрутки (для довгих сторінок, які треба гортати)</label>
-      <label class="mode"><input id="asButton" type="checkbox"> Сайт не вбудовується: показувати кнопку, яка відкриває його у вікні</label>
-      <div class="hint">Вставляйте лише адресу для аудиторії. Адреса зберігається у файлі презентації, і її побачить кожен, хто отримає файл.</div>
-      <div class="hint">Якщо після «Показати» блок порожній або з помилкою «відмовлено в з'єднанні», сайт забороняє вбудовування. Увімкніть останню галочку.</div>
-      <div id="warn" role="status"></div>
+      <label class="field-label" for="url">Адреса сторінки</label>
+      <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://www.menti.com/…" required aria-describedby="err warn urlHint">
       <div id="err" role="alert"></div>
+      <div id="warn" role="status"></div>
+      <div id="urlHint" class="hint">Адреса зберігається у файлі презентації, її побачить кожен, хто отримає файл. Вставляйте лише посилання для аудиторії.</div>
+      <details class="more" id="more">
+        <summary>Додатково</summary>
+        <div class="inner">
+          <div class="row">
+            <label class="field-label" for="scale">Масштаб сторінки</label>
+            <select id="scale" aria-describedby="scaleHint">
+              <option value="1">100%</option>
+              <option value="0.9">90%</option>
+              <option value="0.8">80%</option>
+              <option value="0.75">75%</option>
+              <option value="0.67">67%</option>
+              <option value="0.5">50%</option>
+            </select>
+          </div>
+          <div id="scaleHint" class="hint">Сторінка не вміщується? Зменште масштаб: сайт розкладеться як на більшому екрані.</div>
+          <label class="mode"><input id="allowScroll" type="checkbox"> Дозволити прокрутку сторінки</label>
+          <label class="mode"><input id="asButton" type="checkbox" aria-describedby="buttonHint"> Відкривати сайт у вікні (кнопкою)</label>
+          <div id="buttonHint" class="hint">Для сайтів, які забороняють вбудовування: блок порожній або пише «відмовлено в з'єднанні».</div>
+        </div>
+      </details>
       <div class="actions">
-        <button type="submit" class="btn primary">Показати</button>
+        <button type="submit" class="btn primary">Показати на слайді</button>
         <button id="cancelBtn" type="button" class="btn ghost hidden">Скасувати</button>
       </div>
       <div class="credit"><span class="dot"></span>Created by <b>DTEK Academy</b></div>
@@ -166,6 +196,6 @@
     <button id="editBtn" type="button" title="Змінити адресу та вигляд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Змінити</span></button>
   </div>
 
-  <script src="app.js?v=1.3.0"></script>
+  <script src="app.js?v=1.3.1"></script>
 </body>
 </html>
