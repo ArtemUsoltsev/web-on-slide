@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; object-src 'none'; base-uri 'none';">
+  <title>Web on Slide: help</title>
+  <style>
+    body { max-width: 720px; margin: 32px auto; padding: 0 16px; font: 16px/1.5 "Segoe UI", system-ui, sans-serif; color: #222; }
+    h1 { font-size: 24px; } h2 { font-size: 18px; margin-top: 28px; }
+    code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+  <h1>Web on Slide add-in</h1>
+  <p>Shows a live web page (a poll, a game, any site) right on a PowerPoint slide. Works in PowerPoint for Windows, Mac and the web. <a href="help.html">Українською</a></p>
+
+  <h2>How to insert</h2>
+  <ol>
+    <li>Open a slide and choose <b>Insert → Add-ins → My Add-ins → Web on Slide</b>.</li>
+    <li>Paste the page address and click <b>Show on slide</b>. The block can be moved and resized like a shape.</li>
+    <li>Each slide can have its own address. Copying a slide copies its address too.</li>
+  </ol>
+
+  <h2>Which address to use</h2>
+  <ul>
+    <li><b>Only links meant for the audience.</b> The address is saved in the presentation file as plain text, and anyone who gets the file can see it. Don't paste presenter or admin links or links with tokens.</li>
+    <li><b>YouTube, Vimeo, Google Docs/Sheets/Slides/Forms, Google Drive files, Miro, Figma, Canva:</b> paste the normal address from your browser. The add-in turns it into the embeddable form (a hint appears under the field). The file must be viewable by link.</li>
+  </ul>
+
+  <h2>Options (“More options” on the form)</h2>
+  <ul>
+    <li><b>Session code.</b> Put <code>{code}</code> in the address, e.g. <code>https://www.menti.com/{code}</code>. A “Session code” field appears, and a <b>Code</b> button on the block’s toolbar. Tick <b>Same code for the whole presentation</b> to change it in one place (only if your PowerPoint supports it).</li>
+    <li><b>How to show:</b> page on the slide, a button that opens a window (for sites that forbid embedding), or a QR code only.</li>
+    <li><b>QR code in the corner</b>, <b>show on click</b> (a cover with your caption first), <b>auto refresh</b> (10 s – 5 min), <b>autoplay video</b> (YouTube, Vimeo, muted).</li>
+    <li><b>Zoom into a part</b> of the page (×1.25–×3) with sliders to choose which part.</li>
+    <li><b>Tabs:</b> up to three more pages in the same block, one per line as <code>Name | address</code>.</li>
+    <li><b>Text if the page doesn't open</b>: shown instead of the standard message; without a network it appears at once.</li>
+    <li><b>Border</b> and <b>rounded corners</b>; <b>templates</b> under the address field and your <b>recent addresses</b> (stored only on this computer).</li>
+  </ul>
+
+  <h2>Trainer tools</h2>
+  <p>In <b>Show</b>, besides a web page you can choose a <b>Timer</b>, a <b>Random picker</b> or <b>Team scores</b>. They work without internet; time, scores and picks start over with every slide show.</p>
+
+  <h2>Limitations</h2>
+  <ul>
+    <li>Sites that forbid embedding (Google search, banks, many corporate systems) won't show in the block: use “Button that opens a window”.</li>
+    <li>Only <code>https://</code> addresses are accepted. Flash, Java applets and ActiveX don't work.</li>
+    <li>After you click inside the site, arrows and the clicker control the site, not the slides. Click outside the block to give control back to PowerPoint.</li>
+    <li>When you return to a slide the page reloads. Add-ins don't run in Teams “PowerPoint Live”; print and PDF export show an empty frame.</li>
+  </ul>
+
+  <h2>Security</h2>
+  <p>The add-in stores only its own settings in the file, doesn't read slide content, has no server of its own and collects no data. See the <a href="privacy.html">privacy policy</a>.</p>
+</body>
+</html>

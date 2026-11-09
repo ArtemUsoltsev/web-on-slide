@@ -7,14 +7,16 @@
 
   function go() {
     if (!cfg || typeof cfg.check !== "function") {
-      msg.textContent = "Не вдалося завантажити налаштування надбудови (config.js).";
+      msg.textContent = "Не вдалося завантажити налаштування надбудови (config.js). / Couldn't load the add-in settings (config.js).";
       return;
     }
     var res = cfg.check(target);
     if (res.ok) {
       location.replace(res.url);
     } else {
-      msg.textContent = (cfg.reasonText && cfg.reasonText[res.reason]) || "Ця адреса не дозволена.";
+      var l = (typeof Office !== "undefined" && Office.context && Office.context.displayLanguage) || navigator.language || "uk";
+      var en = cfg.language === "en" || (cfg.language !== "uk" && !/^(uk|ru|be)\b/i.test(l));
+      msg.textContent = cfg.reason ? cfg.reason(res.reason, en ? "en" : "uk") : ((cfg.reasonText && cfg.reasonText[res.reason]) || "Ця адреса не дозволена.");
     }
   }
 

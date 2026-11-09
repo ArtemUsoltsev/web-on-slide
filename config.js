@@ -20,6 +20,9 @@
 
     // Шаблони адрес: кнопки під полем адреси. {код} стає окремим полем «Код сесії».
     // Додайте сюди сервіси своєї організації, наприклад { name: "Наша LMS", url: "https://lms.example.com/course/{код}" }.
+    // Мова інтерфейсу: "auto" (українська для Office українською чи російською, інакше англійська), "uk" або "en".
+    language: "auto",
+
     presets: [
       { name: "Mentimeter", url: "https://www.menti.com/{код}" },
       { name: "Kahoot", url: "https://kahoot.it/?pin={код}" }
@@ -135,6 +138,24 @@
     } }
   ];
 
+  // Автозапуск без звуку для вбудованих плеєрів YouTube і Vimeo (браузери дозволяють autoplay лише без звуку).
+  // Повертає нову адресу або ту саму, якщо це не відомий плеєр.
+  cfg.withAutoplay = function (url) {
+    var u;
+    try { u = new URL(url); } catch (e) { return url; }
+    var h = u.hostname.replace(/^www\./, "");
+    if ((h === "youtube.com" || h === "youtube-nocookie.com") && /^\/embed\//.test(u.pathname)) {
+      u.searchParams.set("autoplay", "1"); u.searchParams.set("mute", "1"); u.searchParams.set("playsinline", "1");
+      return u.href;
+    }
+    if (h === "player.vimeo.com" && /^\/video\//.test(u.pathname)) {
+      u.searchParams.set("autoplay", "1"); u.searchParams.set("muted", "1");
+      return u.href;
+    }
+    return url;
+  };
+  cfg.isPlayer = function (url) { return cfg.withAutoplay(url) !== url; };
+
   // Повертає { url, service }: service = назва сервісу, якщо адресу перетворено, інакше null.
   cfg.toEmbed = function (url) {
     var u;
@@ -156,6 +177,21 @@
     self: "Не можна вставляти сторінку самої надбудови.",
     blocked: "Цей сайт заборонений політикою організації.",
     notAllowed: "Цей сайт не входить до списку дозволених. Зверніться до адміністратора."
+  };
+
+  cfg.reasonTextEn = {
+    empty: "Enter the page address.",
+    invalid: "This doesn't look like a web address.",
+    scheme: "The address must start with https://.",
+    credentials: "The address contains a login or password. They would be saved in the presentation file, so this address is not accepted.",
+    self: "You can't embed the add-in's own page.",
+    blocked: "This site is blocked by your organization's policy.",
+    notAllowed: "This site is not on the allowed list. Contact your administrator."
+  };
+  // Текст причини потрібною мовою: lang = "uk" | "en".
+  cfg.reason = function (code, lang) {
+    var t = lang === "en" ? cfg.reasonTextEn : cfg.reasonText;
+    return t[code] || (lang === "en" ? "This address is not allowed." : "Ця адреса не дозволена.");
   };
 
   window.WEB_ON_SLIDE_CONFIG = cfg;

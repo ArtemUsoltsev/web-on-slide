@@ -13,8 +13,9 @@
   <title>Веб на слайді</title>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <!-- ?v= підніміть після кожної зміни файлів, щоб Office не взяв стару копію з кешу -->
-  <script src="config.js?v=1.5.0"></script>
-  <script src="vendor/qrcode.js?v=1.5.0"></script>
+  <script src="config.js?v=1.6.0"></script>
+  <script src="i18n.js?v=1.6.0"></script>
+  <script src="vendor/qrcode.js?v=1.6.0"></script>
   <style>
     :root {
       --accent: #FFD500; --accent-hover: #ffe04d; --accent-ink: #111;
@@ -105,6 +106,28 @@
     .chips button:hover { border-color: #c4c8cf; background: #fafafa; }
     .chips button:focus-visible { outline: 2px solid #111; outline-offset: 1px; }
 
+    /* Інструменти тренера */
+    #widget { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+    .w-root { box-sizing: border-box; height: 100%; padding: 4vmin; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vmin; text-align: center; }
+    .w-root .btn { font-size: clamp(13px, 3.4vmin, 28px); padding: 1.6vmin 3.6vmin; }
+    .w-title { font-size: clamp(16px, 7vmin, 56px); font-weight: 700; color: var(--ink); }
+    .w-actions { display: flex; gap: 1.6vmin; flex-wrap: wrap; justify-content: center; }
+    .w-note { color: var(--muted); font-size: clamp(12px, 3vmin, 22px); }
+    .w-time { font-size: clamp(40px, 34vmin, 320px); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+    .w-timer.w-warn .w-time { color: var(--danger); }
+    .w-timer.w-done { background: var(--accent); }
+    .w-timer.w-done .w-time { animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .35; } }
+    .w-pick { font-size: clamp(24px, 16vmin, 160px); font-weight: 700; line-height: 1.1; max-width: 95%; word-break: break-word; }
+    .w-picker.w-picked .w-pick { color: #111; background: var(--accent); padding: 0 .3em; border-radius: .2em; }
+    .w-teams { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2vmin; width: 100%; }
+    @media (max-aspect-ratio: 1/1) { .w-teams { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .w-team { border: 2px solid var(--line); border-radius: 2vmin; padding: 2vmin; display: flex; flex-direction: column; align-items: center; gap: 1.4vmin; min-width: 0; }
+    .w-team.w-lead { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent) inset; }
+    .w-team-name { font-size: clamp(13px, 4.4vmin, 40px); font-weight: 600; overflow-wrap: anywhere; }
+    .w-team-pts { font-size: clamp(28px, 16vmin, 150px); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    @media (prefers-reduced-motion: reduce) { .w-timer.w-done .w-time { animation: none; } }
+
     /* Перемикач вкладок: «пігулка» в лівому нижньому куті */
     #tabs { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 2px; padding: 3px; border-radius: 999px; max-width: calc(100% - 16px); overflow-x: auto;
             background: rgba(20,22,26,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
@@ -153,38 +176,38 @@
   <!-- Показується, якщо office.js не завантажився або сторінку відкрили поза PowerPoint -->
   <div id="fatal" class="card hidden" role="alert">
     <div id="fatalText"></div>
-    <div class="hint">Адреса цієї сторінки: <span id="fatalUrl" class="url"></span></div>
+    <div class="hint"><span data-en="This page's address:">Адреса цієї сторінки:</span> <span id="fatalUrl" class="url"></span></div>
   </div>
 
   <div id="frameWrap" class="hidden">
   <div id="frameZoom">
   <iframe id="frame"
-          title="Вбудована сторінка"
+          title="Вбудована сторінка" data-en-title="Embedded page"
           allow="fullscreen; autoplay; clipboard-write; gamepad"
           referrerpolicy="strict-origin-when-cross-origin"
           sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"></iframe>
   </div>
   </div>
 
-  <div id="tabs" class="hidden" role="tablist" aria-label="Вкладки"></div>
+  <div id="tabs" class="hidden" role="tablist" aria-label="Вкладки" data-en-aria="Tabs"></div>
 
   <div id="loading" class="card hidden" role="status">
     <div class="spinner" aria-hidden="true"></div>
-    <div id="loadingText">Завантажую сторінку…</div>
+    <div id="loadingText" data-en="Loading page…">Завантажую сторінку…</div>
   </div>
 
   <div id="loadfail" class="card hidden">
-    <div id="loadfailText">Сторінка не відповідає. Можливо, сайт забороняє вбудовування або немає мережі.</div>
+    <div id="loadfailText" data-en="The page is not responding. The site may forbid embedding, or there is no network.">Сторінка не відповідає. Можливо, сайт забороняє вбудовування або немає мережі.</div>
     <div id="loadfailHost" class="host"></div>
     <div class="actions">
-      <button id="loadfailOpen" class="btn primary" type="button">Відкрити у вікні</button>
-      <button id="loadfailRetry" class="btn" type="button">Спробувати ще раз</button>
+      <button id="loadfailOpen" class="btn primary" type="button" data-en="Open in a window">Відкрити у вікні</button>
+      <button id="loadfailRetry" class="btn" type="button" data-en="Try again">Спробувати ще раз</button>
     </div>
-    <button id="loadfailToButton" class="btn ghost hidden" type="button">Завжди відкривати цей сайт кнопкою</button>
+    <button id="loadfailToButton" class="btn ghost hidden" type="button" data-en="Always open this site with a button">Завжди відкривати цей сайт кнопкою</button>
   </div>
 
   <div id="cover" class="card hidden">
-    <button id="coverBtn" class="btn primary big" type="button">Натисніть, щоб показати</button>
+    <button id="coverBtn" class="btn primary big" type="button" data-en="Click to show">Натисніть, щоб показати</button>
   </div>
 
   <div id="qrCard" class="card hidden">
@@ -194,54 +217,93 @@
 
   <div id="qrCorner" class="hidden" aria-hidden="true"></div>
 
+  <div id="widget" class="hidden"></div>
+
   <div id="launch" class="card hidden">
-    <button id="launchBtn" class="btn primary big" type="button">Відкрити</button>
+    <button id="launchBtn" class="btn primary big" type="button" data-en="Open">Відкрити</button>
     <div id="launchHost" class="host"></div>
   </div>
 
   <!-- Якщо діалог Office не відкрився (блокувальник спливних вікон тощо) -->
   <div id="fallback" class="card hidden">
-    <div>Не вдалося відкрити вікно. Скопіюйте адресу й відкрийте її в браузері:</div>
+    <div data-en="Couldn't open the window. Copy the address and open it in a browser:">Не вдалося відкрити вікно. Скопіюйте адресу й відкрийте її в браузері:</div>
     <div id="fallbackUrl" class="url"></div>
     <div class="actions">
-      <button id="copyBtn" class="btn primary" type="button">Скопіювати адресу</button>
-      <button id="fallbackClose" class="btn" type="button">Закрити</button>
+      <button id="copyBtn" class="btn primary" type="button" data-en="Copy address">Скопіювати адресу</button>
+      <button id="fallbackClose" class="btn" type="button" data-en="Close">Закрити</button>
     </div>
   </div>
 
   <form id="setup" class="hidden" novalidate>
     <div class="panel">
       <div class="head">
-        <h1>Веб на слайді</h1>
-        <a class="help" href="help.html" target="_blank" rel="noopener">Довідка</a>
+        <h1 data-en="Web on Slide">Веб на слайді</h1>
+        <a class="help" id="helpLink" href="help.html" target="_blank" rel="noopener" data-en="Help">Довідка</a>
       </div>
-      <label class="field-label" for="url">Адреса сторінки</label>
+      <div class="row">
+        <label class="field-label" for="kind" data-en="Show">Що показати</label>
+        <select id="kind">
+          <option value="site" data-en="Web page">Веб-сторінку</option>
+          <option value="timer" data-en="Timer">Таймер</option>
+          <option value="picker" data-en="Random picker">Випадковий вибір</option>
+          <option value="score" data-en="Team scores">Рахунок команд</option>
+        </select>
+      </div>
+
+      <div id="siteFields">
+      <label class="field-label" for="url" data-en="Page address">Адреса сторінки</label>
       <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://www.menti.com/…" required aria-describedby="err warn info urlHint" list="recentUrls">
       <datalist id="recentUrls"></datalist>
-      <div id="presets" class="chips hidden"><span>Шаблони:</span></div>
+      <div id="presets" class="chips hidden"><span data-en="Templates:">Шаблони:</span></div>
       <div id="codeRow" class="hidden">
-        <label class="field-label" for="code">Код сесії</label>
+        <label class="field-label" for="code" data-en="Session code">Код сесії</label>
         <input id="code" type="text" autocomplete="off" spellcheck="false" placeholder="1234 5678">
+        <label id="codeSharedRow" class="mode hidden"><input id="codeShared" type="checkbox"> <span data-en="Same code for the whole presentation">Однаковий для всієї презентації</span></label>
       </div>
       <div id="info" role="status"></div>
+      </div>
+
+      <div id="widgetFields" class="hidden">
+        <label class="field-label" for="wTitle" data-en="Heading (optional)">Заголовок (необов'язково)</label>
+        <input id="wTitle" type="text" maxlength="60" placeholder="Наприклад: Обговорення в групах" data-en-ph="For example: Group discussion">
+        <div id="wTimerRow" class="row">
+          <label class="field-label" for="wMinutes" data-en="Duration, min">Тривалість, хв</label>
+          <input id="wMinutes" type="number" min="0.25" max="180" step="0.25" value="5" style="width:90px">
+        </div>
+        <div id="wPickerRow" class="hidden">
+          <label class="field-label" for="wNames" data-en="Names, one per line">Імена, по одному на рядок</label>
+          <textarea id="wNames" spellcheck="false" placeholder="Олена&#10;Андрій&#10;Команда «Схід»" data-en-ph="Anna&#10;Mark&#10;Team East"></textarea>
+          <label class="mode"><input id="wRepeat" type="checkbox"> <span data-en="Names can repeat">Можна вибирати повторно</span></label>
+        </div>
+        <div id="wScoreRow" class="hidden">
+          <label class="field-label" for="wTeams" data-en="Teams, one per line (2–6)">Команди, по одній на рядок (2–6)</label>
+          <textarea id="wTeams" spellcheck="false" placeholder="Схід&#10;Захід" data-en-ph="East&#10;West"></textarea>
+          <div class="row">
+            <label class="field-label" for="wStep" data-en="Points per click">Балів за клік</label>
+            <input id="wStep" type="number" min="1" max="100" step="1" value="1" style="width:90px">
+          </div>
+        </div>
+        <div class="hint" data-en="Works without internet. The timer, scores and picks start over with every slide show.">Працює без інтернету. Таймер, бали й вибрані імена починаються заново з кожним показом.</div>
+      </div>
+
       <div id="err" role="alert"></div>
       <div id="warn" role="status"></div>
-      <div id="urlHint" class="hint">Адреса зберігається у файлі презентації, її побачить кожен, хто отримає файл. Вставляйте лише посилання для аудиторії.</div>
+      <div id="urlHint" class="hint" data-en="The address is saved in the presentation file, so anyone who gets the file will see it. Only use links meant for the audience.">Адреса зберігається у файлі презентації, її побачить кожен, хто отримає файл. Вставляйте лише посилання для аудиторії.</div>
       <details class="more" id="more">
-        <summary>Додатково</summary>
+        <summary data-en="More options">Додатково</summary>
         <div class="inner">
-          <div class="group">Показ</div>
+          <div class="group" data-en="Display">Показ</div>
           <div class="row">
-            <label class="field-label" for="mode">Як показати</label>
+            <label class="field-label" for="mode" data-en="How to show">Як показати</label>
             <select id="mode" aria-describedby="buttonHint">
-              <option value="embed">Сайт на слайді</option>
-              <option value="button">Кнопкою у вікні</option>
-              <option value="qr">Лише QR-код</option>
+              <option value="embed" data-en="Page on the slide">Сайт на слайді</option>
+              <option value="button" data-en="Button that opens a window">Кнопкою у вікні</option>
+              <option value="qr" data-en="QR code only">Лише QR-код</option>
             </select>
           </div>
           <div id="buttonHint" class="hint"></div>
           <div class="row">
-            <label class="field-label" for="scale">Масштаб сторінки</label>
+            <label class="field-label" for="scale" data-en="Page scale">Масштаб сторінки</label>
             <select id="scale" aria-describedby="scaleHint">
               <option value="1">100%</option>
               <option value="0.9">90%</option>
@@ -251,11 +313,11 @@
               <option value="0.5">50%</option>
             </select>
           </div>
-          <div id="scaleHint" class="hint">Сторінка не вміщується? Зменште масштаб: сайт розкладеться як на більшому екрані.</div>
+          <div id="scaleHint" class="hint" data-en="Page doesn't fit? Lower the scale and the site lays out as on a bigger screen.">Сторінка не вміщується? Зменште масштаб: сайт розкладеться як на більшому екрані.</div>
           <div class="row">
-            <label class="field-label" for="zoom">Збільшити частину</label>
+            <label class="field-label" for="zoom" data-en="Zoom into a part">Збільшити частину</label>
             <select id="zoom" aria-describedby="zoomHint">
-              <option value="1">Ні, вся сторінка</option>
+              <option value="1" data-en="No, whole page">Ні, вся сторінка</option>
               <option value="1.25">×1,25</option>
               <option value="1.5">×1,5</option>
               <option value="2">×2</option>
@@ -263,68 +325,70 @@
             </select>
           </div>
           <div id="zoomPos" class="hidden">
-            <div class="row"><label for="fx">Ліворуч ↔ праворуч</label><input id="fx" type="range" min="0" max="100" step="5" value="50"></div>
-            <div class="row"><label for="fy">Вгорі ↕ внизу</label><input id="fy" type="range" min="0" max="100" step="5" value="0"></div>
+            <div class="row"><label for="fx" data-en="Left ↔ right">Ліворуч ↔ праворуч</label><input id="fx" type="range" min="0" max="100" step="5" value="50"></div>
+            <div class="row"><label for="fy" data-en="Top ↕ bottom">Вгорі ↕ внизу</label><input id="fy" type="range" min="0" max="100" step="5" value="0"></div>
           </div>
-          <div id="zoomHint" class="hint">Наприклад, лише таблиця результатів без меню сайту. Повзунки задають, яку частину сторінки показати.</div>
+          <div id="zoomHint" class="hint" data-en="For example, only the results table without the site menu. The sliders choose which part to show.">Наприклад, лише таблиця результатів без меню сайту. Повзунки задають, яку частину сторінки показати.</div>
           <div class="row">
-            <label class="field-label" for="refresh">Автооновлення</label>
+            <label class="field-label" for="refresh" data-en="Auto refresh">Автооновлення</label>
             <select id="refresh">
-              <option value="0">Вимкнено</option>
-              <option value="10">Кожні 10 с</option>
-              <option value="30">Кожні 30 с</option>
-              <option value="60">Щохвилини</option>
-              <option value="300">Кожні 5 хв</option>
+              <option value="0" data-en="Off">Вимкнено</option>
+              <option value="10" data-en="Every 10 s">Кожні 10 с</option>
+              <option value="30" data-en="Every 30 s">Кожні 30 с</option>
+              <option value="60" data-en="Every minute">Щохвилини</option>
+              <option value="300" data-en="Every 5 min">Кожні 5 хв</option>
             </select>
           </div>
-          <label class="mode"><input id="allowScroll" type="checkbox"> Дозволити прокрутку сторінки</label>
-          <label class="mode"><input id="qrCornerOn" type="checkbox"> QR-код адреси в куті блоку</label>
-          <label class="mode"><input id="reveal" type="checkbox"> Показувати сайт по кліку (спершу заставка)</label>
+          <label class="mode"><input id="allowScroll" type="checkbox"> <span data-en="Allow page scrolling">Дозволити прокрутку сторінки</span></label>
+          <label class="mode"><input id="autoplay" type="checkbox"> <span data-en="Autoplay video (YouTube, Vimeo), muted">Автозапуск відео (YouTube, Vimeo) без звуку</span></label>
+          <label class="mode"><input id="qrCornerOn" type="checkbox"> <span data-en="QR code of the address in the corner">QR-код адреси в куті блоку</span></label>
+          <label class="mode"><input id="reveal" type="checkbox"> <span data-en="Show the page on click (cover first)">Показувати сайт по кліку (спершу заставка)</span></label>
           <div id="revealRow" class="hidden">
-            <input id="revealText" type="text" maxlength="80" placeholder="Натисніть, щоб показати" aria-label="Напис на заставці">
+            <input id="revealText" type="text" maxlength="80" placeholder="Натисніть, щоб показати" data-en-ph="Click to show" aria-label="Напис на заставці" data-en-aria="Cover caption">
           </div>
-          <label class="field-label" for="offlineText">Текст, якщо сайт не відкрився</label>
-          <input id="offlineText" type="text" maxlength="160" placeholder="Наприклад: Голосування на menti.com, код 1234 5678">
-          <div class="group">Вкладки</div>
-          <label class="field-label" for="tabsText">Інші сторінки в цьому блоці (до 3)</label>
-          <textarea id="tabsText" spellcheck="false" aria-describedby="tabsHint" placeholder="Результати | https://www.menti.com/…/results"></textarea>
-          <div id="tabsHint" class="hint">По одній на рядок: <b>Назва | адреса</b>. Внизу блоку з'являться кнопки-вкладки для перемикання.</div>
+          <label class="field-label" for="offlineText" data-en="Text if the page doesn't open">Текст, якщо сайт не відкрився</label>
+          <input id="offlineText" type="text" maxlength="160" placeholder="Наприклад: Голосування на menti.com, код 1234 5678" data-en-ph="For example: Vote at menti.com, code 1234 5678">
+          <div class="group" data-en="Tabs">Вкладки</div>
+          <label class="field-label" for="tabsText" data-en="Other pages in this block (up to 3)">Інші сторінки в цьому блоці (до 3)</label>
+          <textarea id="tabsText" spellcheck="false" aria-describedby="tabsHint" placeholder="Результати | https://www.menti.com/…/results" data-en-ph="Results | https://www.menti.com/…/results"></textarea>
+          <div id="tabsHint" class="hint" data-en-html="One per line: &lt;b&gt;Name | address&lt;/b&gt;. Tab buttons appear at the bottom of the block.">По одній на рядок: <b>Назва | адреса</b>. Внизу блоку з'являться кнопки-вкладки для перемикання.</div>
           <div id="mainTitleRow" class="hidden">
-            <label class="field-label" for="mainTitle">Назва першої вкладки</label>
-            <input id="mainTitle" type="text" maxlength="30" placeholder="Сторінка">
+            <label class="field-label" for="mainTitle" data-en="First tab name">Назва першої вкладки</label>
+            <input id="mainTitle" type="text" maxlength="30" placeholder="Сторінка" data-en-ph="Page">
           </div>
-          <div class="group">Вигляд блоку</div>
+          <div class="group" data-en="Block style">Вигляд блоку</div>
           <div class="row">
-            <label class="field-label" for="border">Рамка</label>
+            <label class="field-label" for="border" data-en="Border">Рамка</label>
             <select id="border">
-              <option value="">Немає</option>
-              <option value="gray">Сіра</option>
-              <option value="yellow">Жовта</option>
-              <option value="dark">Темна</option>
+              <option value="" data-en="None">Немає</option>
+              <option value="gray" data-en="Gray">Сіра</option>
+              <option value="yellow" data-en="Yellow">Жовта</option>
+              <option value="dark" data-en="Dark">Темна</option>
             </select>
           </div>
           <div class="row">
-            <label class="mode"><input id="rounded" type="checkbox"> Скруглені кути</label>
-            <label id="cornerBgRow" class="row hidden" style="gap:6px">колір фону слайда <input id="cornerBg" type="color" value="#ffffff"></label>
+            <label class="mode"><input id="rounded" type="checkbox"> <span data-en="Rounded corners">Скруглені кути</span></label>
+            <label id="cornerBgRow" class="row hidden" style="gap:6px"><span data-en="slide background">колір фону слайда</span> <input id="cornerBg" type="color" value="#ffffff"></label>
           </div>
-          <div class="hint">Код сесії: напишіть <b>{код}</b> в адресі, наприклад <b>menti.com/{код}</b>. Тоді для нової групи достатньо змінити лише код.</div>
+          <div class="hint" data-en-html="Session code: put &lt;b&gt;{code}&lt;/b&gt; in the address, e.g. &lt;b&gt;menti.com/{code}&lt;/b&gt;. Then for a new group you only change the code.">Код сесії: напишіть <b>{код}</b> в адресі, наприклад <b>menti.com/{код}</b>. Тоді для нової групи достатньо змінити лише код.</div>
         </div>
       </details>
       <div class="actions">
-        <button type="submit" class="btn primary">Показати на слайді</button>
-        <button id="cancelBtn" type="button" class="btn ghost hidden">Скасувати</button>
+        <button type="submit" class="btn primary" data-en="Show on slide">Показати на слайді</button>
+        <button id="cancelBtn" type="button" class="btn ghost hidden" data-en="Cancel">Скасувати</button>
       </div>
       <div class="credit"><span class="dot"></span>Created by <b>DTEK Academy</b></div>
     </div>
   </form>
 
-  <div id="bar" class="hidden" role="toolbar" aria-label="Керування блоком">
-    <button id="reloadBtn" type="button" title="Перезавантажити сторінку"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span>Оновити</span></button>
-    <button id="popBtn" type="button" title="Відкрити у вікні"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg><span>У вікні</span></button>
-    <button id="codeBtn" type="button" title="Змінити код сесії" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></svg><span>Код</span></button>
-    <button id="editBtn" type="button" title="Змінити адресу та вигляд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Змінити</span></button>
+  <div id="bar" class="hidden" role="toolbar" aria-label="Керування блоком" data-en-aria="Block controls">
+    <button id="reloadBtn" type="button" title="Перезавантажити сторінку" data-en-title="Reload page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span data-en="Reload">Оновити</span></button>
+    <button id="popBtn" type="button" title="Відкрити у вікні" data-en-title="Open in a window"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg><span data-en="Window">У вікні</span></button>
+    <button id="codeBtn" type="button" title="Змінити код сесії" data-en-title="Change session code" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></svg><span data-en="Code">Код</span></button>
+    <button id="editBtn" type="button" title="Змінити адресу та вигляд" data-en-title="Change address and look"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span data-en="Edit">Змінити</span></button>
   </div>
 
-  <script src="app.js?v=1.5.0"></script>
+  <script src="widgets.js?v=1.6.0"></script>
+  <script src="app.js?v=1.6.0"></script>
 </body>
 </html>
