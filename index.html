@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    frame-src https: = можна вбудувати будь-який HTTPS-сайт.
+    Якщо в config.js заповнено allowedOrigins, app.js додає другий CSP лише з цими доменами:
+    браузер перевіряє обидва, тому переходи всередині iframe теж обмежуються списком.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' https://appsforoffice.microsoft.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://appsforoffice.microsoft.com https://*.microsoft.com https://*.office.com https://*.office.net; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'self';">
+  <title>Веб на слайді</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <!-- ?v= підніміть разом із Version у manifest.xml, щоб Office не взяв стару копію з кешу -->
+  <script src="config.js?v=1.2.0"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; color: #eee; font: 14px "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+    .hidden { display: none !important; }
+    button { font: inherit; cursor: pointer; }
+    #frame { border: 0; width: 100%; height: 100%; display: block; background: #fff; }
+
+    #setup { box-sizing: border-box; height: 100%; padding: 16px; display: flex; flex-direction: column; justify-content: center; gap: 10px; max-width: 640px; margin: 0 auto; }
+    #setup input[type=text] { padding: 8px; font: inherit; }
+    #setup label.mode { display: flex; gap: 6px; align-items: center; }
+    #setup .actions { display: flex; gap: 8px; }
+    #setup button { padding: 8px 14px; }
+    #err { color: #f88; min-height: 1.2em; }
+    #warn { color: #fc6; min-height: 1.2em; }
+    .hint { opacity: .8; font-size: 12px; }
+
+    /* Режим "кнопка": для сайтів, які забороняють вбудовування */
+    .card { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 16px; box-sizing: border-box; }
+    .card .big { font-size: 22px; padding: 16px 28px; border-radius: 8px; border: 0; background: #c43e1c; color: #fff; }
+    .card .host { opacity: .85; }
+    .card .url { font-size: 12px; word-break: break-all; opacity: .85; max-width: 90%; user-select: all; }
+
+    /* Картка «не завантажилось» поверх iframe */
+    #loadfail { position: absolute; inset: 0; background: rgba(17,17,17,.92); }
+
+    /* Панель лише в режимі редагування: напівпрозора в правому верхньому куті, яскравіша при наведенні.
+       Займає лише місце під кнопками, щоб не перехоплювати кліки по вбудованій сторінці. */
+    #bar { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: .45; transition: opacity .15s; }
+    #bar:hover, #bar:focus-within { opacity: 1; }
+    #bar button { padding: 4px 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <!-- Показується, якщо office.js не завантажився або сторінку відкрили поза PowerPoint -->
+  <div id="fatal" class="card hidden" role="alert">
+    <div id="fatalText"></div>
+    <div class="hint">Адреса цієї сторінки: <span id="fatalUrl" class="url"></span></div>
+  </div>
+
+  <iframe id="frame" class="hidden"
+          title="Вбудована сторінка"
+          allow="fullscreen; autoplay; clipboard-write; gamepad"
+          referrerpolicy="strict-origin-when-cross-origin"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation"></iframe>
+
+  <div id="loadfail" class="card hidden">
+    <div>Сторінка не відповідає. Можливо, сайт забороняє вбудовування або немає мережі.</div>
+    <div id="loadfailHost" class="host"></div>
+    <button id="loadfailOpen" class="big" type="button">Відкрити у вікні</button>
+    <button id="loadfailRetry" type="button">Спробувати ще раз</button>
+  </div>
+
+  <div id="launch" class="card hidden">
+    <button id="launchBtn" class="big" type="button">Відкрити</button>
+    <div id="launchHost" class="host"></div>
+  </div>
+
+  <!-- Якщо діалог Office не відкрився (блокувальник спливних вікон тощо) -->
+  <div id="fallback" class="card hidden">
+    <div>Не вдалося відкрити вікно. Скопіюйте адресу й відкрийте її в браузері:</div>
+    <div id="fallbackUrl" class="url"></div>
+    <div class="actions">
+      <button id="copyBtn" type="button">Скопіювати адресу</button>
+      <button id="fallbackClose" type="button">Закрити</button>
+    </div>
+  </div>
+
+  <form id="setup" class="hidden" novalidate>
+    <label for="url">Адреса сторінки</label>
+    <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://www.menti.com/…" required>
+    <label class="mode"><input id="asButton" type="checkbox"> Сайт не вбудовується: показувати кнопку, яка відкриває його у вікні</label>
+    <div class="hint">Вставляйте лише адресу для аудиторії. Адреса зберігається у файлі презентації, і її побачить кожен, хто отримає файл.</div>
+    <div class="hint">Якщо після «Показати» блок порожній або з помилкою «відмовлено в з'єднанні», сайт забороняє вбудовування. Увімкніть галочку вище.</div>
+    <div class="actions">
+      <button type="submit">Показати</button>
+      <button id="cancelBtn" type="button" class="hidden">Скасувати</button>
+    </div>
+    <div id="warn" role="status"></div>
+    <div id="err" role="alert"></div>
+  </form>
+
+  <div id="bar" class="hidden">
+    <button id="reloadBtn" type="button" title="Перезавантажити сторінку">Оновити</button>
+    <button id="popBtn" type="button" title="Відкрити у вікні">У вікні</button>
+    <button id="editBtn" type="button" title="Змінити адресу">Змінити</button>
+  </div>
+
+  <script src="app.js?v=1.2.0"></script>
+</body>
+</html>

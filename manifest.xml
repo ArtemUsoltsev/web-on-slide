@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Content add-in для PowerPoint: показує будь-яку веб-сторінку прямо на слайді.
+  Кожна вставка надбудови (кожен слайд) зберігає свій URL у файлі презентації.
+  Адреса хостингу (GitHub Pages, пілот): https://artemusoltsev.github.io/web-on-slide/ — там мають лежати index.html, app.js, dialog.html, dialog.js і config.js.
+  Після будь-якої зміни цього файлу підніміть <Version>, інакше централізоване розгортання його не оновить.
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:type="ContentApp">
+  <Id>0e75450f-e218-481a-b57c-3f9debf78fc2</Id>
+  <Version>1.2.0.0</Version>
+  <ProviderName>Artem Usoltsev</ProviderName>
+  <DefaultLocale>uk-UA</DefaultLocale>
+  <DisplayName DefaultValue="Веб на слайді">
+    <Override Locale="en-US" Value="Web on Slide" />
+  </DisplayName>
+  <Description DefaultValue="Показує живу веб-сторінку (голосування, гру, будь-який сайт) на слайді PowerPoint.">
+    <Override Locale="en-US" Value="Shows a live web page (polls, games, any site) on a PowerPoint slide." />
+  </Description>
+  <IconUrl DefaultValue="https://artemusoltsev.github.io/web-on-slide/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://artemusoltsev.github.io/web-on-slide/icon-64.png" />
+  <!-- Сторінка з інструкцією для доповідачів. Не вказуйте тут index.html: він працює лише всередині PowerPoint. -->
+  <SupportUrl DefaultValue="https://artemusoltsev.github.io/web-on-slide/help.html" />
+
+  <!--
+    AppDomains керує лише навігацією САМОГО вікна надбудови та messageParent з чужого домену.
+    Сторонні сайти ми показуємо у вкладеному iframe, а запасний варіант
+    відкриває їх у діалоговому вікні, тому окремі домени тут не потрібні.
+  -->
+
+  <Hosts>
+    <Host Name="Presentation" />
+  </Hosts>
+
+  <!--
+    Жорстко вимагаємо лише Settings. DialogApi та ActiveView перевіряються в коді
+    (isSetSupported), щоб надбудова завантажувалась і там, де їх немає.
+  -->
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="Settings" />
+    </Sets>
+  </Requirements>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://artemusoltsev.github.io/web-on-slide/index.html" />
+    <RequestedWidth>960</RequestedWidth>
+    <RequestedHeight>540</RequestedHeight>
+  </DefaultSettings>
+
+  <!--
+    Restricted = мінімальний рівень: лише Settings (зберегти URL у файлі) і getActiveViewAsync.
+    Надбудова технічно не може читати чи змінювати вміст слайдів.
+    Якщо на пілоті не спрацює перемикання режимів або діалог, підніміть до ReadDocument, не вище.
+  -->
+  <Permissions>Restricted</Permissions>
+  <!--
+    false: у файл .pptx не зберігається знімок вбудованої сторінки. Без цього у Teams PowerPoint Live,
+    при друці та на машинах без надбудови буде порожня рамка, але вміст внутрішніх сайтів не потрапить у файл.
+    Поставте true лише після погодження зі службою безпеки.
+  -->
+  <AllowSnapshot>false</AllowSnapshot>
+</OfficeApp>
