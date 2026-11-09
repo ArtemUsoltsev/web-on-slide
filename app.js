@@ -27,7 +27,10 @@
   var REFRESH_CHOICES = [0, 10, 30, 60, 300];
   var KEY_AUTOPLAY = "autoplay"; // "1" = автозапуск відео YouTube/Vimeo без звуку
   var KEY_CODE_SHARED = "codeShared"; // "1" = код береться зі спільного тегу презентації
-  var KEY_KIND = "kind";       // "site" | "timer" | "picker" | "score"
+  var KEY_KIND = "kind";       // "site" або інструмент тренера з widgets.js (timer, picker, score, groups, vote, ...)
+  var KEY_ROTATE = "rotate";   // карусель вкладок: секунди між перемиканням (0 = вимкнено)
+  var ROTATE_CHOICES = [0, 10, 20, 30, 60];
+  var TEMPLATES_KEY = "webOnSlide.templates"; // мої шаблони блоків, лише на цьому комп'ютері
   var KEY_WIDGET = "widget";   // JSON налаштувань інструмента тренера
   var SHARED_CODE_TAG = "WEBONSLIDE_CODE"; // тег презентації зі спільним кодом сесії
 
@@ -55,6 +58,8 @@
   var editing = false;    // форма відкрита кнопкою «Змінити»; current при цьому зберігається
   var revealed = false;   // заставку вже прибрали кліком
   var activeTab = 0;      // 0 = основна адреса, 1..3 = додаткові вкладки
+  var rotateTimer = null; // карусель вкладок
+  var editingFromTemplate = false;
   var dialogSupported = false;
   var isWeb = false;
   var loadTimer = null;
@@ -73,6 +78,10 @@
   function cleanRefresh(v) {
     var n = parseInt(v, 10);
     return REFRESH_CHOICES.indexOf(n) !== -1 ? n : 0;
+  }
+  function cleanRotate(v) {
+    var n = parseInt(v, 10);
+    return ROTATE_CHOICES.indexOf(n) !== -1 ? n : 0;
   }
   function cleanZoom(v) {
     var n = parseFloat(v);
@@ -256,6 +265,7 @@
   function unloadFrame() {
     clearLoadTimer();
     stopRefresh();
+    if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
     frame.removeAttribute("src");
   }
 
@@ -302,7 +312,7 @@
     input.removeAttribute("aria-invalid");
     codeInput.removeAttribute("aria-invalid");
     tabsText.removeAttribute("aria-invalid");
-    ["wMinutes", "wNames"].forEach(function (id) { $(id).removeAttribute("aria-invalid"); });
+    ["wMinutes", "wNames", "wTime", "wLines", "wNum"].forEach(function (id) { $(id).removeAttribute("aria-invalid"); });
     if (text) (field || input).setAttribute("aria-invalid", "true");
   }
 
@@ -345,7 +355,14 @@
       show(launch);
     } else if (current.mode === "qr") {
       unloadFrame();
-      $("qrUrl").textContent = shortUrl(target);
+      // Картка входу: якщо адреса містить {код}, показуємо адресу без коду і сам код великими цифрами.
+      if (cfg.hasCode(activeTemplate(current)) && current.code) {
+        $("qrUrl").textContent = shortUrl(cfg.normalize(cfg.fillCode(activeTemplate(current), ""))).replace(/[\/?=&#]+$/, "");
+        $("qrCode").textContent = (L("Код ", "Code ") + current.code.replace(/(\d{4})(?=\d)/g, "$1 "));
+      } else {
+        $("qrUrl").textContent = shortUrl(target);
+        $("qrCode").textContent = "";
+      }
       showQr("card", qrCard, target);
     } else if (current.reveal && !revealed) {
       unloadFrame();
@@ -359,7 +376,16 @@
       if (frame.getAttribute("src") !== url) loadFrame(url);
       else if (!frameLoaded && loadTimer) show(loading);
       if (!refreshTimer) startRefresh(current);
-      if (current.tabs.length) renderTabs();
+      if (current.tabs.length) {
+        renderTabs();
+        if (current.rotate && !rotateTimer) {
+          rotateTimer = setInterval(function () {
+            if (document.hidden || !current || !current.tabs.length) return;
+            activeTab = (activeTab + 1) % (current.tabs.length + 1);
+            render();
+          }, current.rotate * 1000);
+        }
+      }
     }
     if (current.qrCorner && current.mode !== "qr") showQr("corner", qrCorner, target);
 
@@ -429,16 +455,178 @@
     if (box.querySelector("button")) show(box);
   }
 
+  // ---------- Налаштування інструментів тренера у формі ----------
+  // Для кожного інструмента: які рядки форми показати і як підписати спільні поля
+  // (wLines — список, wSub — вибір, wNum — число).
+  var WCFG = {
+    timer: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wTimerRow"],
+      hint: ["Клавіші після кліку по блоку: пробіл — старт/пауза, + — ще хвилина.", "Keys after clicking the block: Space start/pause, + adds a minute."] },
+    "break": { title: ["Заголовок", "Heading"], titlePh: ["Перерва", "Break"], rows: ["wTimeRow"],
+      hint: ["Відлік іде до вказаного часу за годинником комп'ютера, тож він правильний, хоч би коли відкрили слайд.", "Counts down to the clock time on this computer, so it's right whenever the slide is opened."] },
+    picker: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wPickerRow"],
+      hint: ["Клавіші: пробіл або Enter — вибрати. Колесо вміщує до 40 імен.", "Keys: Space or Enter picks. The wheel fits up to 40 names."] },
+    score: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wScoreRow"],
+      hint: ["Клавіші: 1–6 додають бали команді, Shift+цифра віднімає. Спільний рахунок живе на цьому комп'ютері до кінця показу й не потрапляє у файл.", "Keys: 1–6 add points to a team, Shift+digit subtracts. A shared score lives on this computer and is not saved in the file."] },
+    groups: { title: ["Заголовок (необов'язково)", "Heading (optional)"], lines: ["Учасники, по одному на рядок", "Participants, one per line"], linesKey: "names",
+      ph: ["Олена\nАндрій\nМарта\nІгор", "Anna\nMark\nLucy\nTom"],
+      sub: { key: "by", label: ["Ділити за", "Split by"], opts: [["count", "кількістю груп", "number of groups"], ["size", "розміром групи", "group size"]] },
+      num: { key: "n", label: ["Скільки груп / людей у групі", "Groups / people per group"], def: 4, min: 1, max: 100 },
+      hint: ["Клавіші: пробіл — перемішати ще раз.", "Keys: Space reshuffles."] },
+    vote: { title: ["Питання", "Question"], lines: ["Варіанти, по одному на рядок (2–6)", "Options, one per line (2–6)"], linesKey: "options", min: 2,
+      ph: ["Так\nНі\nВагаюся", "Yes\nNo\nNot sure"],
+      hint: ["Тренер рахує підняті руки й натискає «+». Клавіші: 1–6 додають голос, Shift+цифра віднімає.", "Count raised hands and press +. Keys: 1–6 add a vote, Shift+digit subtracts."] },
+    quiz: { title: ["Питання", "Question"], lines: ["Варіанти (2–6); правильний позначте * на початку", "Options (2–6); mark the correct one with * at the start"], linesKey: "options", min: 2,
+      ph: ["Київ\n*Харків\nЛьвів", "Paris\n*Rome\nMadrid"],
+      num: { key: "n", label: ["Час на відповідь, с (0 — без таймера)", "Answer time, s (0 = no timer)"], def: 30, min: 0, max: 600 },
+      hint: ["Клавіші: Enter — показати відповідь, пробіл — таймер.", "Keys: Enter shows the answer, Space starts the timer."] },
+    agenda: { title: ["Заголовок (необов'язково)", "Heading (optional)"], lines: ["Етапи: Назва | хвилини, по одному на рядок", "Stages: Name | minutes, one per line"], linesKey: "steps",
+      ph: ["Обговорення в групах | 10\nПрезентації груп | 15\nПідсумки | 5", "Group discussion | 10\nGroup presentations | 15\nWrap-up | 5"],
+      hint: ["Таймер сам переходить до наступного етапу. Клавіші: пробіл — старт/пауза, стрілки — етапи.", "Moves to the next stage by itself. Keys: Space start/pause, arrows switch stages."] },
+    cards: { title: ["Заголовок (необов'язково)", "Heading (optional)"], lines: ["Картки, по одній на рядок", "Cards, one per line"], linesKey: "cards",
+      ph: ["Клієнт незадоволений терміном\nКолега не виконав свою частину", "The client is unhappy with the deadline\nA colleague missed their part"],
+      hint: ["Кейси, питання чи ролі. Клавіші: пробіл — витягнути картку.", "Cases, questions or roles. Keys: Space draws a card."] },
+    dice: { title: ["Заголовок (необов'язково)", "Heading (optional)"],
+      sub: { key: "dice", label: ["Що кидати", "What to roll"], opts: [["dice", "кубики", "dice"], ["coin", "монетку", "a coin"], ["number", "випадкове число", "a random number"]] },
+      num: { key: "n", label: ["Кубиків (1–6) або до якого числа", "Dice (1–6) or the max number"], def: 1, min: 1, max: 1000000 },
+      hint: ["Клавіші: пробіл — кинути.", "Keys: Space rolls."] }
+  };
+  var W_ROWS = ["wTimerRow", "wTimeRow", "wPickerRow", "wScoreRow", "wLinesRow", "wSubRow", "wNumRow"];
+  function pair(p) { return p ? L(p[0], p[1]) : ""; }
+
+  function fillWidgetForm(kind, w) {
+    var c = WCFG[kind];
+    if (!c) return;
+    $("wTitle").value = w.title || "";
+    $("wMinutes").value = w.minutes || 5;
+    $("wTime").value = w.until || "14:30";
+    $("wNames").value = w.names || "";
+    $("wStyle").value = w.style === "wheel" ? "wheel" : "list";
+    $("wRepeat").checked = !!w.repeat;
+    $("wTeams").value = w.teams || "";
+    $("wStep").value = w.step || 1;
+    $("wShared").checked = !!w.shared;
+    $("wLines").value = c.linesKey ? (w[c.linesKey] || "") : "";
+    if (c.sub) setupSub(c, w[c.sub.key]);
+    if (c.num) $("wNum").value = w[c.num.key] != null ? w[c.num.key] : c.num.def;
+  }
+  function setupSub(c, value) {
+    var sel = $("wSub");
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    c.sub.opts.forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.value = o[0]; opt.textContent = L(o[1], o[2]);
+      sel.appendChild(opt);
+    });
+    sel.value = value || c.sub.opts[0][0];
+  }
+  var lastKind = null;
+  function updateWidgetForm(kind) {
+    var c = WCFG[kind];
+    if (!c) return;
+    var need = (c.rows || []).slice();
+    if (c.lines) need.push("wLinesRow");
+    if (c.sub) need.push("wSubRow");
+    if (c.num) need.push("wNumRow");
+    W_ROWS.forEach(function (id) { if (need.indexOf(id) !== -1) show($(id)); else hide($(id)); });
+    $("wTitleLabel").textContent = pair(c.title);
+    $("wTitle").setAttribute("placeholder", c.titlePh ? pair(c.titlePh) : "");
+    if (c.lines) {
+      $("wLinesLabel").textContent = pair(c.lines);
+      $("wLines").setAttribute("placeholder", c.ph ? pair(c.ph).replace(/\\n/g, "\n") : "");
+    }
+    if (c.sub) {
+      $("wSubLabel").textContent = pair(c.sub.label);
+      if (lastKind !== kind) setupSub(c, $("wSub").value);
+    }
+    if (c.num) {
+      $("wNumLabel").textContent = pair(c.num.label);
+      $("wNum").min = c.num.min; $("wNum").max = c.num.max;
+      if (lastKind !== kind && lastKind !== null && $("wNum").value === "") $("wNum").value = c.num.def;
+    }
+    $("wHint").textContent = L("Працює без інтернету. Стан починається заново з кожним показом. ", "Works offline. State starts over with every show. ") + pair(c.hint);
+    lastKind = kind;
+  }
+  // Збирає налаштування інструмента з форми; повертає { w } або { error, field }.
+  function collectWidget(kind) {
+    var c = WCFG[kind], w = { title: $("wTitle").value.trim().slice(0, 120) };
+    if (kind === "timer") {
+      var m = parseFloat($("wMinutes").value);
+      if (!(m >= 0.25 && m <= 180)) return { error: L("Тривалість від 0,25 до 180 хвилин.", "Duration must be 0.25–180 minutes."), field: $("wMinutes") };
+      w.minutes = m;
+    } else if (kind === "break") {
+      if (!/^\d{1,2}:\d{2}$/.test($("wTime").value)) return { error: L("Вкажіть час повернення.", "Enter the time to come back."), field: $("wTime") };
+      w.until = $("wTime").value;
+    } else if (kind === "picker") {
+      w.names = $("wNames").value.slice(0, 5000);
+      w.repeat = $("wRepeat").checked;
+      w.style = $("wStyle").value;
+      if (!w.names.trim()) return { error: L("Додайте хоча б одне ім'я.", "Add at least one name."), field: $("wNames") };
+    } else if (kind === "score") {
+      w.teams = $("wTeams").value.slice(0, 1000);
+      w.step = Math.max(1, Math.min(100, parseInt($("wStep").value, 10) || 1));
+      w.shared = $("wShared").checked;
+    }
+    if (c && c.linesKey) {
+      var text = $("wLines").value.slice(0, 8000);
+      var count = text.split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
+      if (count < (c.min || 1)) return { error: L("Додайте щонайменше " + (c.min || 1) + " рядки у список.", "Add at least " + (c.min || 1) + " lines to the list.").replace(" 1 рядки", " 1 рядок"), field: $("wLines") };
+      w[c.linesKey] = text;
+    }
+    if (c && c.sub) w[c.sub.key] = $("wSub").value;
+    if (c && c.num) {
+      var n = parseFloat($("wNum").value);
+      if (!(n >= c.num.min && n <= c.num.max)) return { error: pair(c.num.label) + L(": від ", ": from ") + c.num.min + L(" до ", " to ") + c.num.max + ".", field: $("wNum") };
+      w[c.num.key] = n;
+    }
+    return { w: w };
+  }
+
+  // ---------- Мої шаблони блоків (лише на цьому комп'ютері) + шаблони організації з config.js ----------
+  function readTemplates() {
+    var own = [];
+    try { own = JSON.parse(localStorage.getItem(TEMPLATES_KEY) || "[]"); } catch (e) { own = []; }
+    if (!Array.isArray(own)) own = [];
+    var org = Array.isArray(cfg.blockTemplates) ? cfg.blockTemplates : [];
+    return { own: own.filter(function (t) { return t && t.name && t.data; }), org: org.filter(function (t) { return t && t.name && t.data; }) };
+  }
+  function writeTemplates(list) {
+    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list.slice(0, 50))); return true; } catch (e) { return false; }
+  }
+  function fillTemplates() {
+    var sel = $("tplSel"), t = readTemplates();
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    var first = document.createElement("option");
+    first.value = ""; first.textContent = L("— вибрати —", "— choose —");
+    sel.appendChild(first);
+    function add(list, prefix, group) {
+      list.forEach(function (tpl, i) {
+        var o = document.createElement("option");
+        o.value = prefix + i; o.textContent = tpl.name;
+        group.appendChild(o);
+      });
+    }
+    if (t.org.length) { var g1 = document.createElement("optgroup"); g1.label = L("Організації", "Organization"); add(t.org, "o", g1); sel.appendChild(g1); }
+    if (t.own.length) { var g2 = document.createElement("optgroup"); g2.label = L("Мої", "Mine"); add(t.own, "m", g2); sel.appendChild(g2); }
+    if (t.org.length || t.own.length) show($("tplRow")); else hide($("tplRow"));
+    $("tplDel").disabled = true;
+  }
+  function templateName(cur) {
+    if (cur.kind !== "site") {
+      var opt = kindSel.querySelector('option[value="' + cur.kind + '"]');
+      return (opt ? opt.textContent : cur.kind) + (cur.widget && cur.widget.title ? ": " + cur.widget.title : "");
+    }
+    return hostOf(cfg.normalize(cfg.fillCode(cur.url, "x"))) + (cur.tabs.length ? " +" + cur.tabs.length : "") + (cur.mode !== "embed" ? " · " + cur.mode : "");
+  }
+
   // ---------- Форма ----------
   function fillForm(cur) {
     kindSel.value = cur ? cur.kind : "site";
     var w = cur && cur.widget ? cur.widget : {};
-    $("wTitle").value = w.title || "";
-    $("wMinutes").value = w.minutes || 5;
-    $("wNames").value = w.names || "";
-    $("wRepeat").checked = !!w.repeat;
-    $("wTeams").value = w.teams || "";
-    $("wStep").value = w.step || 1;
+    lastKind = null;
+    if (cur && cur.kind !== "site") fillWidgetForm(cur.kind, w);
+    $("rotate").value = String(cur ? cur.rotate || 0 : 0);
+    if (current && !editingFromTemplate) show($("tplSave")); else hide($("tplSave"));
+    fillTemplates();
     autoplayBox.checked = cur ? cur.autoplay : false;
     codeShared.checked = cur ? cur.codeShared : false;
     input.value = cur ? cur.url : "";
@@ -463,7 +651,7 @@
     cornerBg.value = cur ? cur.cornerBg : "#ffffff";
     // Розгортаємо «Додатково», якщо там щось змінено від типового.
     more.open = !!(cur && (cur.mode !== "embed" || cur.scale !== 1 || cur.scroll === "show" ||
-      cur.qrCorner || cur.reveal || cur.refresh || cur.zoom !== 1 || cur.offline || cur.tabs.length || cur.border || cur.rounded || cur.autoplay));
+      cur.qrCorner || cur.reveal || cur.refresh || cur.zoom !== 1 || cur.offline || cur.tabs.length || cur.border || cur.rounded || cur.autoplay || cur.rotate));
     warn.textContent = "";
     setError("");
     updateForm();
@@ -475,9 +663,7 @@
     var site = kind === "site";
     if (site) { show(siteFields, more, $("urlHint")); hide(widgetFields); }
     else { hide(siteFields, more, $("urlHint")); show(widgetFields); }
-    if (kind === "timer") show($("wTimerRow")); else hide($("wTimerRow"));
-    if (kind === "picker") show($("wPickerRow")); else hide($("wPickerRow"));
-    if (kind === "score") show($("wScoreRow")); else hide($("wScoreRow"));
+    if (!site) updateWidgetForm(kind);
     if (sharedCodeOk) show($("codeSharedRow")); else hide($("codeSharedRow"));
     var templ = cfg.normalize(input.value);
     var withCode = cfg.hasCode(templ) || cfg.hasCode(tabsText.value);
@@ -495,6 +681,7 @@
     autoplayBox.disabled = !embed;
     zoomSel.disabled = !embed;
     tabsText.disabled = !embed;
+    $("rotate").disabled = !embed || !tabsText.value.trim();
     qrBox.disabled = mode === "qr";
     if (embed && revealBox.checked) show($("revealRow")); else hide($("revealRow"));
     $("buttonHint").textContent = mode === "button"
@@ -566,7 +753,7 @@
     var savedUrl = settings.get(KEY_URL) || "";
     var savedCode = settings.get(KEY_CODE) || "";
     var savedKind = settings.get(KEY_KIND);
-    var kind = savedKind === "timer" || savedKind === "picker" || savedKind === "score" ? savedKind : "site";
+    var kind = window.WOS_WIDGETS && window.WOS_WIDGETS.kinds.indexOf(savedKind) !== -1 ? savedKind : "site";
     var savedWidget = null;
     try { savedWidget = JSON.parse(settings.get(KEY_WIDGET) || "null"); } catch (e) { savedWidget = null; }
     var siteOk = !!savedUrl && cfg.check(cfg.fillCode(savedUrl, savedCode || "x")).ok;
@@ -593,7 +780,8 @@
         mainTitle: String(settings.get(KEY_MAIN_TITLE) || ""),
         border: ["gray", "yellow", "dark"].indexOf(settings.get(KEY_BORDER)) !== -1 ? settings.get(KEY_BORDER) : "",
         rounded: settings.get(KEY_ROUNDED) === "1",
-        cornerBg: cleanColor(settings.get(KEY_CORNER_BG))
+        cornerBg: cleanColor(settings.get(KEY_CORNER_BG)),
+        rotate: cleanRotate(settings.get(KEY_ROTATE))
       };
       if (needsCode(current)) fillForm(current);
     } else {
@@ -659,7 +847,53 @@
       updateForm();
     });
     modeSel.addEventListener("change", updateForm);
-    kindSel.addEventListener("change", function () { setError(""); updateForm(); });
+    kindSel.addEventListener("change", function () {
+      setError("");
+      if (kindSel.value !== "site" && lastKind !== kindSel.value) fillWidgetForm(kindSel.value, current && current.kind === kindSel.value ? current.widget : {});
+      updateForm();
+    });
+    tabsText.addEventListener("input", function () { $("rotate").disabled = modeSel.value !== "embed" || !tabsText.value.trim(); });
+    $("tplSel").addEventListener("change", function () {
+      var v = $("tplSel").value, t = readTemplates();
+      $("tplDel").disabled = v.charAt(0) !== "m";
+      if (!v) return;
+      var tpl = (v.charAt(0) === "o" ? t.org : t.own)[+v.slice(1)];
+      if (!tpl) return;
+      var d = tpl.data;
+      // Шаблон заповнює форму; зберігається він лише після «Показати на слайді».
+      var keep = $("tplSel").value;
+      editingFromTemplate = true;
+      fillForm({
+        kind: d.kind || "site", widget: d.widget || {}, url: d.url || "", code: d.code || "", codeShared: !!d.codeShared,
+        autoplay: !!d.autoplay, mode: cleanMode(d.mode), scale: cleanScale(d.scale), scroll: d.scroll === "show" ? "show" : "hide",
+        qrCorner: !!d.qrCorner, reveal: !!d.reveal, revealText: d.revealText || "", refresh: cleanRefresh(d.refresh),
+        zoom: cleanZoom(d.zoom), fx: cleanPct(d.fx, 50), fy: cleanPct(d.fy, 0), offline: d.offline || "", tabs: cleanTabs(d.tabs),
+        mainTitle: d.mainTitle || "", border: d.border || "", rounded: !!d.rounded, cornerBg: cleanColor(d.cornerBg), rotate: cleanRotate(d.rotate)
+      });
+      editingFromTemplate = false;
+      $("tplSel").value = keep;
+      $("tplDel").disabled = keep.charAt(0) !== "m";
+    });
+    $("tplDel").addEventListener("click", function () {
+      var v = $("tplSel").value;
+      if (v.charAt(0) !== "m") return;
+      var own = readTemplates().own;
+      own.splice(+v.slice(1), 1);
+      writeTemplates(own);
+      fillTemplates();
+    });
+    $("tplSave").addEventListener("click", function () {
+      if (!current) return;
+      var own = readTemplates().own;
+      var name = templateName(current);
+      own = own.filter(function (t) { return t.name !== name; });
+      own.unshift({ name: name, data: current });
+      if (writeTemplates(own)) {
+        fillTemplates();
+        $("tplSave").textContent = L("Збережено як «", "Saved as “") + name + L("»", "”");
+        setTimeout(function () { $("tplSave").textContent = L("Зберегти цей блок як шаблон", "Save this block as a template"); }, 2500);
+      }
+    });
     revealBox.addEventListener("change", updateForm);
     zoomSel.addEventListener("change", updateForm);
     roundedBox.addEventListener("change", updateForm);
@@ -690,6 +924,7 @@
       settings.set(KEY_BORDER, next.border);
       settings.set(KEY_ROUNDED, next.rounded ? "1" : "");
       settings.set(KEY_CORNER_BG, next.cornerBg);
+      settings.set(KEY_ROTATE, next.rotate || 0);
       settings.saveAsync(function (r) {
         if (r.status !== Office.AsyncResultStatus.Succeeded) {
           setError(L("Не вдалося зберегти налаштування у файлі: ", "Couldn't save the settings in the file: ") + (r.error && r.error.message ? r.error.message : L("невідома помилка", "unknown error")) + L(". Перевірте, чи файл не відкрито лише для читання.", ". Check that the file isn't read-only."));
@@ -713,26 +948,17 @@
       if (kindSel.value !== "site") {
         var base = current || {};
         var k = kindSel.value;
-        var w = { title: $("wTitle").value.trim().slice(0, 60) };
-        if (k === "timer") {
-          var m = parseFloat($("wMinutes").value);
-          if (!(m >= 0.25 && m <= 180)) { setError(L("Тривалість від 0,25 до 180 хвилин.", "Duration must be 0.25–180 minutes."), $("wMinutes")); $("wMinutes").focus(); return; }
-          w.minutes = m;
-        } else if (k === "picker") {
-          w.names = $("wNames").value.slice(0, 5000);
-          w.repeat = $("wRepeat").checked;
-          if (!w.names.trim()) { setError(L("Додайте хоча б одне ім'я.", "Add at least one name."), $("wNames")); $("wNames").focus(); return; }
-        } else {
-          w.teams = $("wTeams").value.slice(0, 1000);
-          w.step = Math.max(1, Math.min(100, parseInt($("wStep").value, 10) || 1));
-        }
+        var got = collectWidget(k);
+        if (got.error) { setError(got.error, got.field); got.field.focus(); return; }
+        var w = got.w;
         setError("");
         saveAll({
           kind: k, widget: w, url: base.url || "", code: base.code || "", codeShared: !!base.codeShared, autoplay: !!base.autoplay,
           mode: base.mode || "embed", scale: base.scale || 1, scroll: base.scroll || "hide", qrCorner: !!base.qrCorner,
           reveal: !!base.reveal, revealText: base.revealText || "", refresh: base.refresh || 0, zoom: base.zoom || 1,
           fx: base.fx == null ? 50 : base.fx, fy: base.fy || 0, offline: base.offline || "", tabs: base.tabs || [],
-          mainTitle: base.mainTitle || "", border: base.border || "", rounded: !!base.rounded, cornerBg: base.cornerBg || "#ffffff"
+          mainTitle: base.mainTitle || "", border: base.border || "", rounded: !!base.rounded, cornerBg: base.cornerBg || "#ffffff",
+          rotate: base.rotate || 0
         });
         return;
       }
@@ -781,7 +1007,8 @@
         mainTitle: mainTitle.value.trim().slice(0, 30),
         border: borderSel.value,
         rounded: roundedBox.checked,
-        cornerBg: cleanColor(cornerBg.value)
+        cornerBg: cleanColor(cornerBg.value),
+        rotate: parsed.tabs.length ? cleanRotate($("rotate").value) : 0
       };
       saveAll(next);
     });
