@@ -13,9 +13,9 @@
 
   function $(id) { return document.getElementById(id); }
   var frame = $("frame"), frameWrap = $("frameWrap"), launch = $("launch"), setup = $("setup"), bar = $("bar");
-  var loadfail = $("loadfail"), fallback = $("fallback"), fatal = $("fatal");
+  var loadfail = $("loadfail"), fallback = $("fallback"), fatal = $("fatal"), loading = $("loading");
   var input = $("url"), asButton = $("asButton"), err = $("err"), warn = $("warn");
-  var scaleSel = $("scale"), allowScroll = $("allowScroll");
+  var scaleSel = $("scale"), allowScroll = $("allowScroll"), more = $("more");
 
   var view = null;        // null (ще невідомо) | "edit" | "read" (показ слайдів)
   var current = null;     // { url, mode, scale, scroll } — збережене налаштування цієї вставки
@@ -48,7 +48,7 @@
 
   // ---------- Фатальні стани: без office.js або поза PowerPoint ----------
   function showFatal(text) {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading);
     $("fatalText").textContent = text;
     $("fatalUrl").textContent = location.href;
     show(fatal);
@@ -84,6 +84,8 @@
     clearLoadTimer();
     frameLoaded = false;
     hide(loadfail);
+    $("loadingText").textContent = hostOf(url) ? "Завантажую " + hostOf(url) + "…" : "Завантажую сторінку…";
+    show(loading);
     frame.title = hostOf(url) || "Вбудована сторінка";
     // scrolling="no" ховає смугу прокрутки вбудованої сторінки (Chromium/Edge WebView2).
     // Атрибут має стояти до завантаження, тому виставляємо його перед src.
@@ -92,6 +94,7 @@
     frame.src = url;
     loadTimer = setTimeout(function () {
       if (!frameLoaded) {
+        hide(loading);
         $("loadfailHost").textContent = hostOf(url);
         show(loadfail);
       }
@@ -103,11 +106,16 @@
     // тому таймер лишається головним сигналом.
     frameLoaded = true;
     clearLoadTimer();
-    hide(loadfail);
+    hide(loadfail, loading);
   });
 
+  function setError(text) {
+    err.textContent = text || "";
+    if (text) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+  }
+
   function render() {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading);
     if (view === null) return; // не малюємо нічого, поки не знаємо режим: інакше форма блимає під час показу
 
     var showForm = !current || (editing && view === "edit");
@@ -115,18 +123,26 @@
       if (view === "edit") {
         if (current) show($("cancelBtn")); else hide($("cancelBtn"));
         show(setup);
+        // Нова вставка: одразу ставимо курсор у поле адреси.
+        if (!current) input.focus();
       }
       // Під час показу без налаштованого URL нічого не показуємо.
       return;
     }
 
     if (current.mode === "button") {
+      // Режим кнопки: iframe не використовується, тож «Оновити» лише викликало б хибне «не відповідає».
+      clearLoadTimer();
+      frame.removeAttribute("src");
       $("launchHost").textContent = hostOf(current.url);
+      hide($("reloadBtn"));
       show(launch);
     } else {
       applyLook(current);
-      if (frame.getAttribute("src") !== current.url) loadFrame(current.url);
+      show($("reloadBtn"));
       show(frameWrap);
+      if (frame.getAttribute("src") !== current.url) loadFrame(current.url);
+      else if (!frameLoaded && loadTimer) show(loading);
     }
     if (view === "edit") show(bar);
   }
@@ -205,6 +221,7 @@
 
     // Попередження про секрети в адресі під час введення (не блокує)
     input.addEventListener("input", function () {
+      if (err.textContent) setError("");
       var res = cfg.check(input.value);
       warn.textContent = res.ok && res.warnSecret
         ? "Схоже, адреса містить токен або ключ. Вона збережеться у файлі презентації відкритим текстом."
@@ -215,10 +232,11 @@
       e.preventDefault();
       var res = cfg.check(input.value);
       if (!res.ok) {
-        err.textContent = cfg.reasonText[res.reason] || "Ця адреса не дозволена.";
+        setError(cfg.reasonText[res.reason] || "Ця адреса не дозволена.");
+        input.focus();
         return;
       }
-      err.textContent = "";
+      setError("");
       var mode = asButton.checked && dialogSupported ? "button" : "embed";
       var scale = cleanScale(scaleSel.value);
       var scroll = allowScroll.checked ? "show" : "hide";
@@ -228,7 +246,7 @@
       settings.set(KEY_SCROLL, scroll);
       settings.saveAsync(function (r) {
         if (r.status !== Office.AsyncResultStatus.Succeeded) {
-          err.textContent = "Не вдалося зберегти адресу у файлі: " + (r.error && r.error.message ? r.error.message : "невідома помилка") + ". Перевірте, чи файл не відкрито лише для читання.";
+          setError("Не вдалося зберегти адресу у файлі: " + (r.error && r.error.message ? r.error.message : "невідома помилка") + ". Перевірте, чи файл не відкрито лише для читання.");
           return;
         }
         current = { url: res.url, mode: mode, scale: scale, scroll: scroll };
@@ -245,15 +263,22 @@
       if (scaleSel.selectedIndex < 0) scaleSel.value = "1";
       allowScroll.checked = current ? current.scroll === "show" : false;
       warn.textContent = "";
-      err.textContent = "";
+      setError("");
+      // Розгортаємо «Додатково», якщо там щось змінено від типового.
+      more.open = !!(current && (current.mode === "button" || current.scale !== 1 || current.scroll === "show"));
       editing = true;
       render();
       input.focus();
     });
-    $("cancelBtn").addEventListener("click", function () {
+    function cancelEdit() {
+      if (!current || !editing) return;
       editing = false;
-      err.textContent = "";
+      setError("");
       render();
+    }
+    $("cancelBtn").addEventListener("click", cancelEdit);
+    setup.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
     });
     $("reloadBtn").addEventListener("click", function () { if (current) loadFrame(current.url); });
     $("loadfailRetry").addEventListener("click", function () { if (current) loadFrame(current.url); });
@@ -267,7 +292,14 @@
         navigator.clipboard.writeText(text).then(function () {
           $("copyBtn").textContent = "Скопійовано";
           setTimeout(function () { $("copyBtn").textContent = "Скопіювати адресу"; }, 1500);
-        }, function () { /* текст уже виділяється кліком (user-select: all) */ });
+        }, copyFailed);
+      } else {
+        copyFailed();
+      }
+      function copyFailed() {
+        // Адреса виділяється одним кліком (user-select: all), тож підказуємо скопіювати вручну.
+        $("copyBtn").textContent = "Не вдалося. Виділіть адресу й натисніть Ctrl+C";
+        setTimeout(function () { $("copyBtn").textContent = "Скопіювати адресу"; }, 3000);
       }
     });
   });
