@@ -12,6 +12,17 @@
   var KEY_REVEAL = "reveal";   // "1" = сайт з'являється лише після кліку по заставці
   var KEY_REVEAL_TEXT = "revealText"; // підпис на заставці
   var KEY_REFRESH = "refresh"; // автооновлення, секунди (0 = вимкнено)
+  var KEY_ZOOM = "zoom";       // збільшення частини сторінки, 1–3
+  var KEY_FX = "fx", KEY_FY = "fy"; // яку частину збільшувати: 0–100% по горизонталі й вертикалі
+  var KEY_OFFLINE = "offline"; // власний текст, якщо сайт не відкрився
+  var KEY_TABS = "tabs";       // JSON: [{t: назва, u: адреса}] — додаткові вкладки
+  var KEY_MAIN_TITLE = "mainTitle"; // назва першої вкладки
+  var KEY_BORDER = "border";   // "" | "gray" | "yellow" | "dark"
+  var KEY_ROUNDED = "rounded"; // "1" = скруглені кути
+  var KEY_CORNER_BG = "cornerBg"; // колір за скругленими кутами (під колір слайда)
+  var MAX_TABS = 3;            // додаткових вкладок, крім основної
+  var ZOOM_CHOICES = [1, 1.25, 1.5, 2, 3];
+  var RECENT_KEY = "webOnSlide.recent"; // нещодавні адреси, лише на цьому комп'ютері
   var LOAD_TIMEOUT_MS = 10000; // через скільки показати картку «сторінка не відповідає»
   var REFRESH_CHOICES = [0, 10, 30, 60, 300];
   var DEFAULT_REVEAL_TEXT = "Натисніть, щоб показати";
@@ -25,11 +36,14 @@
   var input = $("url"), codeInput = $("code"), codeRow = $("codeRow"), info = $("info"), err = $("err"), warn = $("warn");
   var modeSel = $("mode"), scaleSel = $("scale"), refreshSel = $("refresh"), allowScroll = $("allowScroll");
   var qrBox = $("qrCornerOn"), revealBox = $("reveal"), revealText = $("revealText"), more = $("more");
+  var zoomSel = $("zoom"), fxIn = $("fx"), fyIn = $("fy"), offlineIn = $("offlineText"), tabsText = $("tabsText"), mainTitle = $("mainTitle");
+  var borderSel = $("border"), roundedBox = $("rounded"), cornerBg = $("cornerBg"), tabsBar = $("tabs"), frameZoom = $("frameZoom");
 
   var view = null;        // null (ще невідомо) | "edit" | "read" (показ слайдів)
   var current = null;     // збережене налаштування цієї вставки (див. readSettings)
   var editing = false;    // форма відкрита кнопкою «Змінити»; current при цьому зберігається
   var revealed = false;   // заставку вже прибрали кліком
+  var activeTab = 0;      // 0 = основна адреса, 1..3 = додаткові вкладки
   var dialogSupported = false;
   var isWeb = false;
   var loadTimer = null;
@@ -48,21 +62,70 @@
     var n = parseInt(v, 10);
     return REFRESH_CHOICES.indexOf(n) !== -1 ? n : 0;
   }
+  function cleanZoom(v) {
+    var n = parseFloat(v);
+    return ZOOM_CHOICES.indexOf(n) !== -1 ? n : 1;
+  }
+  function cleanPct(v, def) {
+    var n = parseInt(v, 10);
+    return isFinite(n) && n >= 0 && n <= 100 ? n : def;
+  }
+  function cleanColor(v) { return /^#[0-9a-f]{6}$/i.test(v || "") ? v : "#ffffff"; }
+  function cleanTabs(v) {
+    var arr;
+    try { arr = typeof v === "string" ? JSON.parse(v) : v; } catch (e) { arr = null; }
+    if (!Array.isArray(arr)) return [];
+    var out = [];
+    for (var i = 0; i < arr.length && out.length < MAX_TABS; i++) {
+      if (arr[i] && typeof arr[i].u === "string") out.push({ t: String(arr[i].t || "").slice(0, 30), u: arr[i].u });
+    }
+    return out;
+  }
+  // Рядки «Назва | адреса» з форми → [{t, u}]; повертає { tabs, error }.
+  function parseTabs(text, code) {
+    var lines = String(text || "").split(/\r?\n/), tabs = [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var bar = line.lastIndexOf("|");
+      var title = bar === -1 ? "" : line.slice(0, bar).trim();
+      var url = cfg.normalize(bar === -1 ? line : line.slice(bar + 1));
+      var res = cfg.check(cfg.fillCode(url, code || "x"));
+      if (!res.ok) return { tabs: [], error: "Вкладка «" + (title || url) + "»: " + (cfg.reasonText[res.reason] || "адреса не дозволена.") };
+      if (tabs.length >= MAX_TABS) return { tabs: [], error: "Можна додати не більше " + MAX_TABS + " вкладок." };
+      tabs.push({ t: title.slice(0, 30) || hostOf(url) || "Сторінка " + (tabs.length + 2), u: url });
+    }
+    return { tabs: tabs, error: null };
+  }
+  function tabsToText(tabs) {
+    return tabs.map(function (t) { return t.t + " | " + t.u; }).join("\n");
+  }
+
   function cleanMode(v) {
     if (v === "button" && dialogSupported) return "button";
     if (v === "qr") return "qr";
     return "embed";
   }
 
+  // Шаблон адреси активної вкладки.
+  function activeTemplate(cur) {
+    var i = activeTab > 0 && activeTab <= cur.tabs.length ? activeTab : 0;
+    return i ? cur.tabs[i - 1].u : cur.url;
+  }
   // Адреса, яку відкривають люди (у вікні, за QR-кодом): шаблон із підставленим кодом.
-  function targetUrl(cur) { return cfg.normalize(cfg.fillCode(cur.url, cur.code)); }
+  function targetUrl(cur) { return cfg.normalize(cfg.fillCode(activeTemplate(cur), cur.code)); }
   // Адреса для блоку на слайді: та сама, але перетворена на embed-адресу, якщо сервіс відомий.
   function frameUrl(cur) {
     var t = targetUrl(cur);
     var e = cfg.toEmbed(t);
     return e.service && cfg.check(e.url).ok ? e.url : t;
   }
-  function needsCode(cur) { return cfg.hasCode(cur.url) && !cur.code; }
+  function usesCode(cur) {
+    if (cfg.hasCode(cur.url)) return true;
+    for (var i = 0; i < cur.tabs.length; i++) if (cfg.hasCode(cur.tabs[i].u)) return true;
+    return false;
+  }
+  function needsCode(cur) { return usesCode(cur) && !cur.code; }
 
   // Масштаб < 1: iframe більший за блок у 1/scale разів і зменшений transform-ом,
   // тож сайт розкладається як на більшому екрані й вміщується без прокрутки.
@@ -71,6 +134,12 @@
     frame.style.width = (100 / k) + "%";
     frame.style.height = (100 / k) + "%";
     frame.style.transform = k === 1 ? "" : "scale(" + k + ")";
+    // Кадр: збільшуємо обгортку навколо точки (fx%, fy%), тож видно лише цю частину сторінки.
+    var z = cleanZoom(cur.zoom);
+    frameZoom.style.transformOrigin = cur.fx + "% " + cur.fy + "%";
+    frameZoom.style.transform = z === 1 ? "" : "scale(" + z + ")";
+    frameWrap.className = (cur.border ? "b-" + cur.border : "") + (cur.rounded ? " rounded" : "");
+    document.body.style.background = cur.rounded ? cur.cornerBg : "";
   }
 
   function hostOf(url) {
@@ -189,13 +258,22 @@
     var noScroll = !current || current.scroll !== "show";
     if (noScroll) frame.setAttribute("scrolling", "no"); else frame.removeAttribute("scrolling");
     frame.src = url;
+    // Без мережі не чекаємо 10 секунд: одразу показуємо картку (з власним текстом тренера, якщо є).
     loadTimer = setTimeout(function () {
-      if (!frameLoaded) {
-        hide(loading);
-        $("loadfailHost").textContent = hostOf(url);
-        show(loadfail);
-      }
-    }, LOAD_TIMEOUT_MS);
+      if (!frameLoaded) showLoadFail(url);
+    }, navigator.onLine === false ? 300 : LOAD_TIMEOUT_MS);
+  }
+
+  var DEFAULT_FAIL_TEXT = "Сторінка не відповідає. Можливо, сайт забороняє вбудовування або немає мережі.";
+  function showLoadFail(url) {
+    hide(loading);
+    var own = current && current.offline;
+    $("loadfailText").textContent = own || DEFAULT_FAIL_TEXT;
+    $("loadfailText").style.fontSize = own ? "clamp(16px, 5vmin, 40px)" : "";
+    $("loadfailHost").textContent = own ? "" : hostOf(url);
+    // Підказка-виправлення лише для автора, не під час показу.
+    if (view === "edit" && dialogSupported) show($("loadfailToButton")); else hide($("loadfailToButton"));
+    show(loadfail);
   }
 
   frame.addEventListener("load", function () {
@@ -210,11 +288,13 @@
     err.textContent = text || "";
     input.removeAttribute("aria-invalid");
     codeInput.removeAttribute("aria-invalid");
+    tabsText.removeAttribute("aria-invalid");
     if (text) (field || input).setAttribute("aria-invalid", "true");
   }
 
   function render() {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar);
+    document.body.style.background = "";
     if (view === null) return; // не малюємо нічого, поки не знаємо режим: інакше форма блимає під час показу
 
     var showForm = !current || needsCode(current) || (editing && view === "edit");
@@ -253,14 +333,73 @@
       if (frame.getAttribute("src") !== url) loadFrame(url);
       else if (!frameLoaded && loadTimer) show(loading);
       if (!refreshTimer) startRefresh(current);
+      if (current.tabs.length) renderTabs();
     }
     if (current.qrCorner && current.mode !== "qr") showQr("corner", qrCorner, target);
 
     if (view === "edit") {
       if (reloadable) show($("reloadBtn")); else hide($("reloadBtn"));
-      if (cfg.hasCode(current.url)) show($("codeBtn")); else hide($("codeBtn"));
+      if (usesCode(current)) show($("codeBtn")); else hide($("codeBtn"));
       show(bar);
     }
+  }
+
+  function renderTabs() {
+    while (tabsBar.firstChild) tabsBar.removeChild(tabsBar.firstChild);
+    var titles = [current.mainTitle || "Сторінка"].concat(current.tabs.map(function (t) { return t.t; }));
+    titles.forEach(function (title, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", i === activeTab ? "true" : "false");
+      b.textContent = title;
+      b.addEventListener("click", function () {
+        if (i === activeTab) return;
+        activeTab = i;
+        render();
+      });
+      tabsBar.appendChild(b);
+    });
+    show(tabsBar);
+  }
+
+  // ---------- Нещодавні адреси (лише на цьому комп'ютері, у файл не потрапляють) ----------
+  function readRecent() {
+    try { var a = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(a) ? a.slice(0, 10) : []; }
+    catch (e) { return []; }
+  }
+  function rememberRecent(url) {
+    var list = readRecent().filter(function (u) { return u !== url; });
+    list.unshift(url);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 10))); } catch (e) { /* сховище недоступне */ }
+    fillRecent();
+  }
+  function fillRecent() {
+    var dl = $("recentUrls");
+    while (dl.firstChild) dl.removeChild(dl.firstChild);
+    readRecent().forEach(function (u) {
+      var o = document.createElement("option");
+      o.value = u;
+      dl.appendChild(o);
+    });
+  }
+  function fillPresets() {
+    var list = Array.isArray(cfg.presets) ? cfg.presets : [];
+    var box = $("presets");
+    list.forEach(function (p) {
+      if (!p || !p.name || !p.url) return;
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = p.name;
+      b.title = p.url;
+      b.addEventListener("click", function () {
+        input.value = p.url;
+        updateForm();
+        if (cfg.hasCode(p.url)) { codeInput.focus(); } else { input.focus(); }
+      });
+      box.appendChild(b);
+    });
+    if (box.querySelector("button")) show(box);
   }
 
   // ---------- Форма ----------
@@ -275,9 +414,19 @@
     qrBox.checked = cur ? cur.qrCorner : false;
     revealBox.checked = cur ? cur.reveal : false;
     revealText.value = cur && cur.revealText !== DEFAULT_REVEAL_TEXT ? cur.revealText : "";
+    zoomSel.value = String(cur ? cur.zoom : 1);
+    if (zoomSel.selectedIndex < 0) zoomSel.value = "1";
+    fxIn.value = cur ? cur.fx : 50;
+    fyIn.value = cur ? cur.fy : 0;
+    offlineIn.value = cur ? cur.offline : "";
+    tabsText.value = cur ? tabsToText(cur.tabs) : "";
+    mainTitle.value = cur ? cur.mainTitle : "";
+    borderSel.value = cur ? cur.border : "";
+    roundedBox.checked = cur ? cur.rounded : false;
+    cornerBg.value = cur ? cur.cornerBg : "#ffffff";
     // Розгортаємо «Додатково», якщо там щось змінено від типового.
     more.open = !!(cur && (cur.mode !== "embed" || cur.scale !== 1 || cur.scroll === "show" ||
-      cur.qrCorner || cur.reveal || cur.refresh));
+      cur.qrCorner || cur.reveal || cur.refresh || cur.zoom !== 1 || cur.offline || cur.tabs.length || cur.border || cur.rounded));
     warn.textContent = "";
     setError("");
     updateForm();
@@ -286,8 +435,11 @@
   // Показує поле коду, підказку про перетворення адреси і вмикає лише доречні для режиму параметри.
   function updateForm() {
     var templ = cfg.normalize(input.value);
-    var withCode = cfg.hasCode(templ);
+    var withCode = cfg.hasCode(templ) || cfg.hasCode(tabsText.value);
     if (withCode) show(codeRow); else hide(codeRow);
+    if (tabsText.value.trim()) show($("mainTitleRow")); else hide($("mainTitleRow"));
+    if (zoomSel.value !== "1" && modeSel.value === "embed") show($("zoomPos")); else hide($("zoomPos"));
+    if (roundedBox.checked) show($("cornerBgRow")); else hide($("cornerBgRow"));
 
     var mode = modeSel.value;
     var embed = mode === "embed";
@@ -295,6 +447,8 @@
     refreshSel.disabled = !embed;
     allowScroll.disabled = !embed;
     revealBox.disabled = !embed;
+    zoomSel.disabled = !embed;
+    tabsText.disabled = !embed;
     qrBox.disabled = mode === "qr";
     if (embed && revealBox.checked) show($("revealRow")); else hide($("revealRow"));
     $("buttonHint").textContent = mode === "button"
@@ -370,7 +524,16 @@
         qrCorner: settings.get(KEY_QR) === "corner",
         reveal: settings.get(KEY_REVEAL) === "1",
         revealText: String(settings.get(KEY_REVEAL_TEXT) || DEFAULT_REVEAL_TEXT),
-        refresh: cleanRefresh(settings.get(KEY_REFRESH))
+        refresh: cleanRefresh(settings.get(KEY_REFRESH)),
+        zoom: cleanZoom(settings.get(KEY_ZOOM)),
+        fx: cleanPct(settings.get(KEY_FX), 50),
+        fy: cleanPct(settings.get(KEY_FY), 0),
+        offline: String(settings.get(KEY_OFFLINE) || ""),
+        tabs: cleanTabs(settings.get(KEY_TABS)).filter(function (t) { return cfg.check(cfg.fillCode(t.u, savedCode || "x")).ok; }),
+        mainTitle: String(settings.get(KEY_MAIN_TITLE) || ""),
+        border: ["gray", "yellow", "dark"].indexOf(settings.get(KEY_BORDER)) !== -1 ? settings.get(KEY_BORDER) : "",
+        rounded: settings.get(KEY_ROUNDED) === "1",
+        cornerBg: cleanColor(settings.get(KEY_CORNER_BG))
       };
       if (needsCode(current)) fillForm(current);
     } else {
@@ -385,7 +548,7 @@
       });
       Office.context.document.addHandlerAsync(Office.EventType.ActiveViewChanged, function (e) {
         // Кожен новий показ починається із заставки, навіть якщо в редакторі її вже відкрили.
-        if (e.activeView !== view) revealed = false;
+        if (e.activeView !== view) { revealed = false; activeTab = 0; }
         view = e.activeView;
         render();
       });
@@ -404,16 +567,29 @@
     });
     modeSel.addEventListener("change", updateForm);
     revealBox.addEventListener("change", updateForm);
+    zoomSel.addEventListener("change", updateForm);
+    roundedBox.addEventListener("change", updateForm);
+    tabsText.addEventListener("input", function () { if (err.textContent) setError(""); updateForm(); });
+    fillPresets();
+    fillRecent();
 
     setup.addEventListener("submit", function (e) {
       e.preventDefault();
       var templ = cfg.normalize(input.value);
-      var withCode = cfg.hasCode(templ);
+      var withCode = cfg.hasCode(templ) || cfg.hasCode(tabsText.value);
       var code = withCode ? codeInput.value.replace(/\s+/g, "") : "";
+      var embedMode = modeSel.value === "embed";
+      var parsed = embedMode ? parseTabs(tabsText.value, code) : { tabs: [], error: null };
       var res = cfg.check(cfg.fillCode(templ, code || "x"));
       if (!res.ok) {
         setError(cfg.reasonText[res.reason] || "Ця адреса не дозволена.");
         input.focus();
+        return;
+      }
+      if (parsed.error) {
+        setError(parsed.error, tabsText);
+        more.open = true;
+        tabsText.focus();
         return;
       }
       if (withCode && !code) {
@@ -431,7 +607,16 @@
         qrCorner: qrBox.checked && modeSel.value !== "qr",
         reveal: revealBox.checked && modeSel.value === "embed",
         revealText: revealText.value.trim() || DEFAULT_REVEAL_TEXT,
-        refresh: cleanRefresh(refreshSel.value)
+        refresh: cleanRefresh(refreshSel.value),
+        zoom: embedMode ? cleanZoom(zoomSel.value) : 1,
+        fx: cleanPct(fxIn.value, 50),
+        fy: cleanPct(fyIn.value, 0),
+        offline: offlineIn.value.trim().slice(0, 160),
+        tabs: parsed.tabs,
+        mainTitle: mainTitle.value.trim().slice(0, 30),
+        border: borderSel.value,
+        rounded: roundedBox.checked,
+        cornerBg: cleanColor(cornerBg.value)
       };
       settings.set(KEY_URL, next.url);
       settings.set(KEY_CODE, next.code);
@@ -442,6 +627,15 @@
       settings.set(KEY_REVEAL, next.reveal ? "1" : "");
       settings.set(KEY_REVEAL_TEXT, next.revealText);
       settings.set(KEY_REFRESH, next.refresh);
+      settings.set(KEY_ZOOM, next.zoom);
+      settings.set(KEY_FX, next.fx);
+      settings.set(KEY_FY, next.fy);
+      settings.set(KEY_OFFLINE, next.offline);
+      settings.set(KEY_TABS, JSON.stringify(next.tabs));
+      settings.set(KEY_MAIN_TITLE, next.mainTitle);
+      settings.set(KEY_BORDER, next.border);
+      settings.set(KEY_ROUNDED, next.rounded ? "1" : "");
+      settings.set(KEY_CORNER_BG, next.cornerBg);
       settings.saveAsync(function (r) {
         if (r.status !== Office.AsyncResultStatus.Succeeded) {
           setError("Не вдалося зберегти налаштування у файлі: " + (r.error && r.error.message ? r.error.message : "невідома помилка") + ". Перевірте, чи файл не відкрито лише для читання.");
@@ -450,6 +644,8 @@
         current = next;
         editing = false;
         revealed = false;
+        activeTab = 0;
+        rememberRecent(next.url);
         unloadFrame();
         render();
       });
@@ -476,6 +672,15 @@
     });
     $("coverBtn").addEventListener("click", function () { revealed = true; render(); });
     $("reloadBtn").addEventListener("click", function () { if (current) loadFrame(frameUrl(current)); });
+    $("loadfailToButton").addEventListener("click", function () {
+      if (!current) return;
+      settings.set(KEY_MODE, "button");
+      settings.saveAsync(function (r) {
+        if (r.status !== Office.AsyncResultStatus.Succeeded) return;
+        current.mode = "button";
+        render();
+      });
+    });
     $("loadfailRetry").addEventListener("click", function () { if (current) loadFrame(frameUrl(current)); });
     $("popBtn").addEventListener("click", function () { if (current) openInDialog(targetUrl(current)); });
     $("launchBtn").addEventListener("click", function () { if (current) openInDialog(targetUrl(current)); });

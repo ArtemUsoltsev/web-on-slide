@@ -16,7 +16,14 @@
 
     // Параметри запиту, що схожі на секрети. Адреса зберігається у файлі .pptx відкритим текстом,
     // тому при таких параметрах показуємо попередження (не блокуємо).
-    secretParams: ["token", "key", "secret", "sig", "signature", "auth", "password", "pwd", "access_token"]
+    secretParams: ["token", "key", "secret", "sig", "signature", "auth", "password", "pwd", "access_token"],
+
+    // Шаблони адрес: кнопки під полем адреси. {код} стає окремим полем «Код сесії».
+    // Додайте сюди сервіси своєї організації, наприклад { name: "Наша LMS", url: "https://lms.example.com/course/{код}" }.
+    presets: [
+      { name: "Mentimeter", url: "https://www.menti.com/{код}" },
+      { name: "Kahoot", url: "https://kahoot.it/?pin={код}" }
+    ]
   };
 
   // Дописує https://, якщо схеми немає. "menti.com/abc" -> "https://menti.com/abc".
@@ -32,6 +39,8 @@
     var url = cfg.normalize(value);
     var result = { ok: false, url: url, reason: null, warnSecret: false };
     if (!url) { result.reason = "empty"; return result; }
+    // Пробіл в адресі майже завжди означає, що вставлено зайвий текст. Chromium такі адреси «лагодить» мовчки.
+    if (/\s/.test(url)) { result.reason = "invalid"; return result; }
     var u;
     try { u = new URL(url); } catch (e) { result.reason = "invalid"; return result; }
     if (u.protocol !== "https:") { result.reason = "scheme"; return result; }
