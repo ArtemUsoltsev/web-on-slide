@@ -26,13 +26,11 @@
   var LOAD_TIMEOUT_MS = 10000; // через скільки показати картку «сторінка не відповідає»
   var REFRESH_CHOICES = [0, 10, 30, 60, 300];
   var KEY_AUTOPLAY = "autoplay"; // "1" = автозапуск відео YouTube/Vimeo без звуку
-  var KEY_CODE_SHARED = "codeShared"; // "1" = код береться зі спільного тегу презентації
   var KEY_KIND = "kind";       // "site" або інструмент тренера з widgets.js (timer, picker, score, groups, vote, ...)
   var KEY_ROTATE = "rotate";   // карусель вкладок: секунди між перемиканням (0 = вимкнено)
   var ROTATE_CHOICES = [0, 10, 20, 30, 60];
   var TEMPLATES_KEY = "webOnSlide.templates"; // мої шаблони блоків, лише на цьому комп'ютері
   var KEY_WIDGET = "widget";   // JSON налаштувань інструмента тренера
-  var SHARED_CODE_TAG = "WEBONSLIDE_CODE"; // тег презентації зі спільним кодом сесії
 
   function L(uk, en) { return window.WOS_I18N ? window.WOS_I18N.L(uk, en) : uk; }
   function lang() { return window.WOS_I18N ? window.WOS_I18N.lang() : "uk"; }
@@ -51,7 +49,7 @@
   var qrBox = $("qrCornerOn"), revealBox = $("reveal"), revealText = $("revealText"), more = $("more");
   var zoomSel = $("zoom"), fxIn = $("fx"), fyIn = $("fy"), offlineIn = $("offlineText"), tabsText = $("tabsText"), mainTitle = $("mainTitle");
   var kindSel = $("kind"), siteFields = $("siteFields"), widgetFields = $("widgetFields"), widgetBox = $("widget");
-  var autoplayBox = $("autoplay"), codeShared = $("codeShared");
+  var autoplayBox = $("autoplay");
   var borderSel = $("border"), roundedBox = $("rounded"), cornerBg = $("cornerBg"), tabsBar = $("tabs"), frameZoom = $("frameZoom");
 
   var view = null;        // null (ще невідомо) | "edit" | "read" (показ слайдів)
@@ -67,7 +65,6 @@
   var refreshTimer = null;
   var frameLoaded = false;
   var qrDrawnFor = { corner: null, card: null };
-  var sharedCodeOk = false;   // PowerPoint дозволяє читати й писати теги презентації (спільний код)
 
   function hide() { for (var i = 0; i < arguments.length; i++) arguments[i].classList.add("hidden"); }
   function show() { for (var i = 0; i < arguments.length; i++) arguments[i].classList.remove("hidden"); }
@@ -654,7 +651,6 @@
     if (current && !editingFromTemplate) show($("tplSave")); else hide($("tplSave"));
     fillTemplates();
     autoplayBox.checked = cur ? cur.autoplay : false;
-    codeShared.checked = cur ? cur.codeShared : false;
     input.value = cur ? cur.url : "";
     codeInput.value = cur ? cur.code : "";
     modeSel.value = cur ? cur.mode : "embed";
@@ -690,7 +686,6 @@
     if (site) { show(siteFields, more, $("urlHint")); hide(widgetFields); }
     else { hide(siteFields, more, $("urlHint")); show(widgetFields); }
     if (!site) updateWidgetForm(kind);
-    if (sharedCodeOk) show($("codeSharedRow")); else hide($("codeSharedRow"));
     var templ = cfg.normalize(input.value);
     var withCode = cfg.hasCode(templ) || cfg.hasCode(tabsText.value);
     if (withCode) show(codeRow); else hide(codeRow);
@@ -790,7 +785,6 @@
         widget: savedWidget && typeof savedWidget === "object" ? savedWidget : {},
         url: siteOk ? savedUrl : "",
         code: String(savedCode),
-        codeShared: settings.get(KEY_CODE_SHARED) === "1",
         autoplay: settings.get(KEY_AUTOPLAY) === "1",
         mode: cleanMode(settings.get(KEY_MODE)),
         scale: cleanScale(settings.get(KEY_SCALE)),
@@ -815,39 +809,6 @@
       updateForm();
     }
 
-    // ---------- Спільний код для всієї презентації ----------
-    // Зберігається в тезі презентації (PowerPoint API 1.3). Якщо PowerPoint цього не дозволяє
-    // (старіша версія або обмежені дозволи надбудови), галочка просто не показується.
-    function readSharedCode() {
-      return PowerPoint.run(function (ctx) {
-        var tag = ctx.presentation.tags.getItemOrNullObject(SHARED_CODE_TAG);
-        tag.load("value");
-        return ctx.sync().then(function () { return tag.isNullObject ? null : String(tag.value || ""); });
-      });
-    }
-    function writeSharedCode(code) {
-      return PowerPoint.run(function (ctx) {
-        ctx.presentation.tags.add(SHARED_CODE_TAG, code);
-        return ctx.sync();
-      });
-    }
-    var sharedCodeApi = typeof PowerPoint !== "undefined" && PowerPoint.run && req && req.isSetSupported("PowerPointApi", "1.3");
-    // Читаємо тег під час завантаження і при кожній зміні режиму (редагування ↔ показ),
-    // щоб код, змінений на іншому слайді, дійшов і до вже відкритих блоків.
-    function refreshSharedCode() {
-      if (!sharedCodeApi) return;
-      try {
-        readSharedCode().then(function (code) {
-          if (!sharedCodeOk) { sharedCodeOk = true; updateForm(); }
-          if (code && current && current.kind === "site" && current.codeShared && code !== current.code) {
-            current.code = code;
-            if (!editing) render();
-          }
-        }, function () { sharedCodeOk = false; });
-      } catch (e) { sharedCodeOk = false; }
-    }
-    refreshSharedCode();
-
     var activeViewSupported = !!(req && req.isSetSupported("ActiveView", "1.1"));
     if (activeViewSupported) {
       Office.context.document.getActiveViewAsync(function (r) {
@@ -863,7 +824,6 @@
         }
         view = e.activeView;
         render();
-        refreshSharedCode();
       });
     } else {
       view = "edit";
@@ -905,7 +865,7 @@
       editingFromTemplate = true;
       fillForm({
         kind: window.WOS_WIDGETS && window.WOS_WIDGETS.kinds.indexOf(d.kind) !== -1 ? d.kind : "site",
-        widget: d.widget && typeof d.widget === "object" ? d.widget : {}, url: d.url || "", code: d.code || "", codeShared: !!d.codeShared,
+        widget: d.widget && typeof d.widget === "object" ? d.widget : {}, url: d.url || "", code: d.code || "",
         autoplay: !!d.autoplay, mode: cleanMode(d.mode), scale: cleanScale(d.scale), scroll: d.scroll === "show" ? "show" : "hide",
         qrCorner: !!d.qrCorner, reveal: !!d.reveal, revealText: d.revealText || "", refresh: cleanRefresh(d.refresh),
         zoom: cleanZoom(d.zoom), fx: cleanPct(d.fx, 50), fy: cleanPct(d.fy, 0), offline: d.offline || "", tabs: cleanTabs(d.tabs),
@@ -947,7 +907,6 @@
       settings.set(KEY_WIDGET, JSON.stringify(next.widget || {}));
       settings.set(KEY_URL, next.url);
       settings.set(KEY_CODE, next.code);
-      settings.set(KEY_CODE_SHARED, next.codeShared ? "1" : "");
       settings.set(KEY_AUTOPLAY, next.autoplay ? "1" : "");
       settings.set(KEY_MODE, next.mode);
       settings.set(KEY_SCALE, next.scale);
@@ -991,7 +950,7 @@
         var w = got.w;
         setError("");
         saveAll({
-          kind: k, widget: w, url: base.url || "", code: base.code || "", codeShared: !!base.codeShared, autoplay: !!base.autoplay,
+          kind: k, widget: w, url: base.url || "", code: base.code || "", autoplay: !!base.autoplay,
           mode: base.mode || "embed", scale: base.scale || 1, scroll: base.scroll || "hide", qrCorner: !!base.qrCorner,
           reveal: !!base.reveal, revealText: base.revealText || "", refresh: base.refresh || 0, zoom: base.zoom || 1,
           fx: base.fx == null ? 50 : base.fx, fy: base.fy || 0, offline: base.offline || "", tabs: base.tabs || [],
@@ -1028,7 +987,6 @@
         widget: {},
         url: templ,
         code: code,
-        codeShared: codeShared.checked && sharedCodeOk,
         autoplay: autoplayBox.checked && modeSel.value === "embed",
         mode: cleanMode(modeSel.value),
         scale: cleanScale(scaleSel.value),
@@ -1048,16 +1006,7 @@
         cornerBg: cleanColor(cornerBg.value),
         rotate: parsed.tabs.length ? cleanRotate($("rotate").value) : 0
       };
-      if (!next.codeShared || !next.code) { saveAll(next); return; }
-      // Спільний код спершу записуємо в презентацію: якщо PowerPoint не дозволив, кажемо про це одразу,
-      // а не мовчки лишаємо код лише в цьому блоці.
-      var failShared = function () {
-        sharedCodeOk = false;
-        codeShared.checked = false;
-        updateForm();
-        setError(L("PowerPoint не дозволив записати спільний код у презентацію. Галочку знято: натисніть «Показати на слайді» ще раз, і код збережеться лише для цього блоку.", "PowerPoint didn't allow saving the shared code in the presentation. The tick was removed: click Show on slide again to keep the code for this block only."), codeInput);
-      };
-      try { writeSharedCode(next.code).then(function () { saveAll(next); }, failShared); } catch (e3) { failShared(); }
+      saveAll(next);
     });
 
     function openForm(focusEl) {
