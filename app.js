@@ -44,6 +44,7 @@
   function $(id) { return document.getElementById(id); }
   var frame = $("frame"), frameWrap = $("frameWrap"), launch = $("launch"), setup = $("setup"), bar = $("bar");
   var loadfail = $("loadfail"), fallback = $("fallback"), fatal = $("fatal"), loading = $("loading");
+  var notice = $("notice");
   var cover = $("cover"), qrCard = $("qrCard"), qrCorner = $("qrCorner");
   var input = $("url"), codeInput = $("code"), codeRow = $("codeRow"), info = $("info"), err = $("err"), warn = $("warn");
   var modeSel = $("mode"), scaleSel = $("scale"), refreshSel = $("refresh"), allowScroll = $("allowScroll");
@@ -218,7 +219,7 @@
 
   // ---------- Фатальні стани: без office.js або поза PowerPoint ----------
   function showFatal(text) {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, notice);
     $("fatalText").textContent = text;
     $("fatalUrl").textContent = location.href;
     show(fatal);
@@ -317,7 +318,7 @@
   }
 
   function render() {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar, widgetBox);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar, widgetBox, notice);
     document.body.style.background = "";
     if (view === null) return; // не малюємо нічого, поки не знаємо режим: інакше форма блимає під час показу
 
@@ -330,7 +331,11 @@
         // Нова вставка: одразу ставимо курсор у поле адреси.
         if (!current) input.focus();
       }
-      // Під час показу без налаштованого URL нічого не показуємо.
+      // Під час показу без налаштованого URL нічого не показуємо, а без коду сесії пояснюємо, що сталося,
+      // щоб тренер не побачив перед залом порожній білий блок.
+      if (view !== "edit" && current && needsCode(current)) {
+        showNotice(L("Не задано код сесії. Вийдіть з показу й натисніть «Код» на цьому блоці.", "No session code is set. Leave the slide show and click Code on this block."));
+      }
       return;
     }
 
@@ -348,6 +353,15 @@
 
     var target = targetUrl(current);
     var reloadable = false;
+    // Код сесії підставляється вже після перевірки шаблону, тож перевіряємо остаточну адресу ще раз:
+    // код у назві сайту (https://{код}.example.com) не повинен обходити білий список.
+    var finalCheck = cfg.check(target);
+    if (!finalCheck.ok) {
+      unloadFrame();
+      showNotice(reason(finalCheck.reason));
+      if (view === "edit") { hide($("reloadBtn"), $("popBtn")); if (usesCode(current)) show($("codeBtn")); else hide($("codeBtn")); show(bar); }
+      return;
+    }
     if (current.mode === "button") {
       // Режим кнопки: iframe не використовується, тож «Оновити» лише викликало б хибне «не відповідає».
       unloadFrame();
@@ -395,6 +409,11 @@
       if (usesCode(current)) show($("codeBtn")); else hide($("codeBtn"));
       show(bar);
     }
+  }
+
+  function showNotice(text) {
+    $("noticeText").textContent = text;
+    show(notice);
   }
 
   function renderTabs() {
@@ -466,7 +485,7 @@
     picker: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wPickerRow"],
       hint: ["Клавіші: пробіл або Enter — вибрати. Колесо вміщує до 40 імен.", "Keys: Space or Enter picks. The wheel fits up to 40 names."] },
     score: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wScoreRow"],
-      hint: ["Клавіші: 1–6 додають бали команді, Shift+цифра віднімає. Спільний рахунок живе на цьому комп'ютері до кінця показу й не потрапляє у файл.", "Keys: 1–6 add points to a team, Shift+digit subtracts. A shared score lives on this computer and is not saved in the file."] },
+      hint: ["Клавіші: 1–6 додають бали команді, Shift+цифра віднімає. Спільний рахунок живе на цьому комп'ютері 12 годин після останньої зміни (або до «Обнулити») і не потрапляє у файл.", "Keys: 1–6 add points to a team, Shift+digit subtracts. A shared score lives on this computer for 12 hours after the last change (or until Reset) and is not saved in the file."] },
     groups: { title: ["Заголовок (необов'язково)", "Heading (optional)"], lines: ["Учасники, по одному на рядок", "Participants, one per line"], linesKey: "names",
       ph: ["Олена\nАндрій\nМарта\nІгор", "Anna\nMark\nLucy\nTom"],
       sub: { key: "by", label: ["Ділити за", "Split by"], opts: [["count", "кількістю груп", "number of groups"], ["size", "розміром групи", "group size"]] },
@@ -540,10 +559,15 @@
     }
     if (c.num) {
       $("wNumLabel").textContent = pair(c.num.label);
+      if (kind === "dice") {
+        var sub = $("wSub").value;
+        $("wNumLabel").textContent = sub === "number" ? L("До якого числа", "Up to which number") : L("Скільки кубиків (1–6)", "How many dice (1–6)");
+        if (sub === "coin") hide($("wNumRow")); else show($("wNumRow"));
+      }
       $("wNum").min = c.num.min; $("wNum").max = c.num.max;
       if (lastKind !== kind && lastKind !== null && $("wNum").value === "") $("wNum").value = c.num.def;
     }
-    $("wHint").textContent = L("Працює без інтернету. Стан починається заново з кожним показом. ", "Works offline. State starts over with every show. ") + pair(c.hint);
+    $("wHint").textContent = L("Працює без інтернету. Стан починається заново з кожним показом (крім спільного рахунку). ", "Works offline. State starts over with every show (except a shared score). ") + pair(c.hint);
     lastKind = kind;
   }
   // Збирає налаштування інструмента з форми; повертає { w } або { error, field }.
@@ -575,6 +599,8 @@
     if (c && c.sub) w[c.sub.key] = $("wSub").value;
     if (c && c.num) {
       var n = parseFloat($("wNum").value);
+      if (kind === "dice" && w.dice === "dice" && !(n >= 1 && n <= 6)) return { error: L("Кубиків може бути від 1 до 6.", "You can roll 1 to 6 dice."), field: $("wNum") };
+      if (kind === "dice" && w.dice === "number" && !(n >= 2)) return { error: L("Число має бути щонайменше 2.", "The number must be at least 2."), field: $("wNum") };
       if (!(n >= c.num.min && n <= c.num.max)) return { error: pair(c.num.label) + L(": від ", ": from ") + c.num.min + L(" до ", " to ") + c.num.max + ".", field: $("wNum") };
       w[c.num.key] = n;
     }
@@ -707,6 +733,7 @@
   }
 
   function openInDialog(url) {
+    if (!cfg.check(url).ok) return;
     if (!dialogSupported) { showFallback(url); return; }
     var dialogUrl = new URL("dialog.html", location.href);
     dialogUrl.searchParams.set("u", url);
@@ -804,18 +831,22 @@
         return ctx.sync();
       });
     }
-    if (typeof PowerPoint !== "undefined" && PowerPoint.run && req && req.isSetSupported("PowerPointApi", "1.3")) {
+    var sharedCodeApi = typeof PowerPoint !== "undefined" && PowerPoint.run && req && req.isSetSupported("PowerPointApi", "1.3");
+    // Читаємо тег під час завантаження і при кожній зміні режиму (редагування ↔ показ),
+    // щоб код, змінений на іншому слайді, дійшов і до вже відкритих блоків.
+    function refreshSharedCode() {
+      if (!sharedCodeApi) return;
       try {
         readSharedCode().then(function (code) {
-          sharedCodeOk = true;
-          updateForm();
-          if (code && current && current.codeShared && code !== current.code) {
+          if (!sharedCodeOk) { sharedCodeOk = true; updateForm(); }
+          if (code && current && current.kind === "site" && current.codeShared && code !== current.code) {
             current.code = code;
-            render();
+            if (!editing) render();
           }
         }, function () { sharedCodeOk = false; });
       } catch (e) { sharedCodeOk = false; }
     }
+    refreshSharedCode();
 
     var activeViewSupported = !!(req && req.isSetSupported("ActiveView", "1.1"));
     if (activeViewSupported) {
@@ -832,6 +863,7 @@
         }
         view = e.activeView;
         render();
+        refreshSharedCode();
       });
     } else {
       view = "edit";
@@ -852,6 +884,14 @@
       if (kindSel.value !== "site" && lastKind !== kindSel.value) fillWidgetForm(kindSel.value, current && current.kind === kindSel.value ? current.widget : {});
       updateForm();
     });
+    // Кубики й випадкове число ділять одне поле: при перемиканні ставимо доречне значення.
+    $("wSub").addEventListener("change", function () {
+      if (kindSel.value !== "dice") return;
+      var n = parseFloat($("wNum").value);
+      if ($("wSub").value === "number" && !(n > 6)) $("wNum").value = 100;
+      if ($("wSub").value === "dice" && !(n >= 1 && n <= 6)) $("wNum").value = 1;
+      updateWidgetForm("dice");
+    });
     tabsText.addEventListener("input", function () { $("rotate").disabled = modeSel.value !== "embed" || !tabsText.value.trim(); });
     $("tplSel").addEventListener("change", function () {
       var v = $("tplSel").value, t = readTemplates();
@@ -859,12 +899,13 @@
       if (!v) return;
       var tpl = (v.charAt(0) === "o" ? t.org : t.own)[+v.slice(1)];
       if (!tpl) return;
-      var d = tpl.data;
+      var d = tpl.data && typeof tpl.data === "object" ? tpl.data : {};
       // Шаблон заповнює форму; зберігається він лише після «Показати на слайді».
       var keep = $("tplSel").value;
       editingFromTemplate = true;
       fillForm({
-        kind: d.kind || "site", widget: d.widget || {}, url: d.url || "", code: d.code || "", codeShared: !!d.codeShared,
+        kind: window.WOS_WIDGETS && window.WOS_WIDGETS.kinds.indexOf(d.kind) !== -1 ? d.kind : "site",
+        widget: d.widget && typeof d.widget === "object" ? d.widget : {}, url: d.url || "", code: d.code || "", codeShared: !!d.codeShared,
         autoplay: !!d.autoplay, mode: cleanMode(d.mode), scale: cleanScale(d.scale), scroll: d.scroll === "show" ? "show" : "hide",
         qrCorner: !!d.qrCorner, reveal: !!d.reveal, revealText: d.revealText || "", refresh: cleanRefresh(d.refresh),
         zoom: cleanZoom(d.zoom), fx: cleanPct(d.fx, 50), fy: cleanPct(d.fy, 0), offline: d.offline || "", tabs: cleanTabs(d.tabs),
@@ -929,9 +970,6 @@
         if (r.status !== Office.AsyncResultStatus.Succeeded) {
           setError(L("Не вдалося зберегти налаштування у файлі: ", "Couldn't save the settings in the file: ") + (r.error && r.error.message ? r.error.message : L("невідома помилка", "unknown error")) + L(". Перевірте, чи файл не відкрито лише для читання.", ". Check that the file isn't read-only."));
           return;
-        }
-        if (next.kind === "site" && next.codeShared && sharedCodeOk && next.code) {
-          try { writeSharedCode(next.code).then(null, function () { /* лишається код цього блоку */ }); } catch (e2) { /* те саме */ }
         }
         current = next;
         editing = false;
@@ -1010,7 +1048,16 @@
         cornerBg: cleanColor(cornerBg.value),
         rotate: parsed.tabs.length ? cleanRotate($("rotate").value) : 0
       };
-      saveAll(next);
+      if (!next.codeShared || !next.code) { saveAll(next); return; }
+      // Спільний код спершу записуємо в презентацію: якщо PowerPoint не дозволив, кажемо про це одразу,
+      // а не мовчки лишаємо код лише в цьому блоці.
+      var failShared = function () {
+        sharedCodeOk = false;
+        codeShared.checked = false;
+        updateForm();
+        setError(L("PowerPoint не дозволив записати спільний код у презентацію. Галочку знято: натисніть «Показати на слайді» ще раз, і код збережеться лише для цього блоку.", "PowerPoint didn't allow saving the shared code in the presentation. The tick was removed: click Show on slide again to keep the code for this block only."), codeInput);
+      };
+      try { writeSharedCode(next.code).then(function () { saveAll(next); }, failShared); } catch (e3) { failShared(); }
     });
 
     function openForm(focusEl) {

@@ -30,7 +30,7 @@
 
   <h2>Options (“More options” on the form)</h2>
   <ul>
-    <li><b>Session code.</b> Put <code>{code}</code> in the address, e.g. <code>https://www.menti.com/{code}</code>. A “Session code” field appears, and a <b>Code</b> button on the block’s toolbar. Tick <b>Same code for the whole presentation</b> to change it in one place (only if your PowerPoint supports it).</li>
+    <li><b>Session code.</b> Put <code>{code}</code> in the address, e.g. <code>https://www.menti.com/{code}</code>. A “Session code” field appears, and a <b>Code</b> button on the block’s toolbar. Tick <b>Same code for the whole presentation</b> to change it in one place (only if your PowerPoint and the add-in's permissions support it; if the code can't be saved, the form tells you).</li>
     <li><b>How to show:</b> page on the slide, a button that opens a window (for sites that forbid embedding), or a QR code only.</li>
     <li><b>QR code in the corner</b>, <b>show on click</b> (a cover with your caption first), <b>auto refresh</b> (10 s – 5 min), <b>autoplay video</b> (YouTube, Vimeo, muted).</li>
     <li><b>Zoom into a part</b> of the page (×1.25–×3) with sliders to choose which part.</li>
@@ -44,7 +44,7 @@
   <ul>
     <li><b>Timer</b> and <b>Break until a time</b> (e.g. back at 14:30, counted by the computer clock).</li>
     <li><b>Random picker</b> as a list or a <b>wheel of fortune</b> (up to 40 names).</li>
-    <li><b>Team scores</b>; tick <b>Shared score</b> so every block with the same teams shows the same points on all slides (kept on this computer, not in the file).</li>
+    <li><b>Team scores</b>; tick <b>Shared score</b> so every block with the same teams shows the same points on all slides (kept on this computer for 12 hours after the last change or until Reset, not in the file).</li>
     <li><b>Split into groups</b> by number of groups or group size.</li>
     <li><b>Show of hands vote</b>: 2–6 options, the trainer adds the counted hands.</li>
     <li><b>Quiz card</b>: mark the correct option with <b>*</b>; answer timer and Show answer.</li>
@@ -54,7 +54,7 @@
   </ul>
   <p><b>Keys</b> (click the block during the show): Space is the main action, Enter shows the quiz answer, 1–6 add a point or vote, Shift+digit subtracts, arrows switch agenda stages. <b>Copy results</b> puts groups, votes, scores or picks on the clipboard.</p>
   <p>Also: <b>join card</b> (QR-only mode with a <b>{code}</b> address shows the short address and the code in big digits), <b>My templates</b> (save a configured block on this computer and reuse it; admins can add organization templates in <code>config.js</code>), and <b>auto-switching tabs</b> every 10 s – 1 min.</p>
-  <p>They work without internet; time, scores and picks start over with every slide show.</p>
+  <p>They work without internet; time, scores and picks start over with every slide show, except a shared team score.</p>
 
   <h2>Limitations</h2>
   <ul>

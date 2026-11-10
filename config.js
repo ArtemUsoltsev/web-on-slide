@@ -18,8 +18,6 @@
     // тому при таких параметрах показуємо попередження (не блокуємо).
     secretParams: ["token", "key", "secret", "sig", "signature", "auth", "password", "pwd", "access_token"],
 
-    // Шаблони адрес: кнопки під полем адреси. {код} стає окремим полем «Код сесії».
-    // Додайте сюди сервіси своєї організації, наприклад { name: "Наша LMS", url: "https://lms.example.com/course/{код}" }.
     // Мова інтерфейсу: "auto" (українська для Office українською чи російською, інакше англійська), "uk" або "en".
     language: "auto",
 
@@ -28,6 +26,8 @@
     // { name: "Перерва 10 хв", data: { kind: "timer", w: { minutes: 10, title: "Перерва" } } }
     blockTemplates: [],
 
+    // Швидкі адреси: кнопки під полем адреси. {код} стає окремим полем «Код сесії».
+    // Додайте сюди сервіси своєї організації, наприклад { name: "Наша LMS", url: "https://lms.example.com/course/{код}" }.
     presets: [
       { name: "Mentimeter", url: "https://www.menti.com/{код}" },
       { name: "Kahoot", url: "https://kahoot.it/?pin={код}" }
@@ -101,6 +101,8 @@
       if (h === "youtu.be") return ytEmbed(u.pathname.slice(1).split("/")[0], u);
       if (h !== "youtube.com" && h !== "youtube-nocookie.com") return null;
       if (u.pathname === "/watch" && u.searchParams.get("v")) return ytEmbed(u.searchParams.get("v"), u);
+      var list = u.searchParams.get("list");
+      if (u.pathname === "/playlist" && list && /^[\w-]{10,64}$/.test(list)) return "https://www.youtube.com/embed/videoseries?list=" + list;
       var m = /^\/(shorts|live)\/([\w-]+)/.exec(u.pathname);
       return m ? ytEmbed(m[2], u) : null;
     } },

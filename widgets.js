@@ -1,7 +1,8 @@
 // Інструменти тренера, що працюють без інтернету і без сторонніх сайтів.
 // Налаштування (тривалість, списки) зберігаються у файлі; поточний стан (час, бали, хто вже вибраний)
 // живе в пам'яті й починається заново з кожним показом. Виняток: спільний рахунок команд
-// (w.shared) живе в localStorage цього комп'ютера й синхронізується між блоками через BroadcastChannel.
+// (w.shared) живе в localStorage цього комп'ютера 12 годин після останньої зміни
+// і синхронізується між блоками через BroadcastChannel.
 //
 // Кожен віджет повертає { destroy, key(e) -> true, якщо клавішу оброблено, results() -> текст для звіту }.
 (function () {
@@ -236,11 +237,14 @@
         ctx.beginPath(); ctx.moveTo(c, c); ctx.arc(c, c, r, a0, a1); ctx.closePath();
         ctx.fillStyle = COLORS[ci]; ctx.fill();
         ctx.strokeStyle = "#dfe2e7"; ctx.lineWidth = 2; ctx.stroke();
-        ctx.save(); ctx.translate(c, c); ctx.rotate((a0 + a1) / 2);
+        var mid = (a0 + a1) / 2, norm = ((mid % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        // На лівій половині колеса повертаємо підпис на 180°, щоб він не був догори ногами.
+        var flip = norm > Math.PI / 2 && norm < 3 * Math.PI / 2;
+        ctx.save(); ctx.translate(c, c); ctx.rotate(flip ? mid + Math.PI : mid);
         ctx.fillStyle = INK[ci]; ctx.font = "600 " + (n > 20 ? 18 : 26) + "px Segoe UI, system-ui, sans-serif";
-        ctx.textAlign = "right"; ctx.textBaseline = "middle";
+        ctx.textAlign = flip ? "left" : "right"; ctx.textBaseline = "middle";
         var label = list[i].length > 18 ? list[i].slice(0, 17) + "…" : list[i];
-        ctx.fillText(label, r - 16, 0); ctx.restore();
+        ctx.fillText(label, flip ? -(r - 16) : r - 16, 0); ctx.restore();
       }
     }
     function draw() {
@@ -297,11 +301,20 @@
     if (teams.length < 2) teams = [L("Команда 1", "Team 1"), L("Команда 2", "Team 2")];
     var step = Math.max(1, Math.min(100, parseInt(w.step, 10) || 1));
     var storeKey = "webOnSlide.score:" + teams.join("|");
+    var SHARED_TTL_MS = 12 * 3600 * 1000; // спільний рахунок забувається через 12 годин після останньої зміни
     var chan = null;
     var pts = teams.map(function () { return 0; });
+    function validPts(a) {
+      return Array.isArray(a) && a.length === teams.length && a.every(function (x) { return typeof x === "number" && isFinite(x); });
+    }
     if (w.shared) {
-      try { var saved = JSON.parse(localStorage.getItem(storeKey) || "null"); if (Array.isArray(saved) && saved.length === teams.length) pts = saved.map(Number); } catch (e) { /* немає сховища */ }
-      try { chan = new BroadcastChannel("webOnSlide.score"); chan.onmessage = function (m) { if (m.data && m.data.key === storeKey) { pts = m.data.pts.slice(); draw(); } }; } catch (e2) { chan = null; }
+      try {
+        var saved = JSON.parse(localStorage.getItem(storeKey) || "null");
+        // Старий формат (просто масив) не має часу: вважаємо його застарілим.
+        if (saved && validPts(saved.pts) && typeof saved.t === "number" && Date.now() - saved.t < SHARED_TTL_MS) pts = saved.pts.slice();
+        else localStorage.removeItem(storeKey);
+      } catch (e) { /* немає сховища */ }
+      try { chan = new BroadcastChannel("webOnSlide.score"); chan.onmessage = function (m) { if (m.data && m.data.key === storeKey && validPts(m.data.pts)) { pts = m.data.pts.slice(); draw(); } }; } catch (e2) { chan = null; }
     }
     root.classList.add("w-score");
     title(root, w);
@@ -321,12 +334,12 @@
     root.appendChild(grid);
     var resetB = btn("ghost", L("Обнулити", "Reset"), function () { pts = pts.map(function () { return 0; }); changed(); });
     root.appendChild(row(resetB));
-    if (w.shared) root.appendChild(el("div", "w-note", L("Спільний рахунок для всіх слайдів з цими командами", "Shared score across slides with these teams")));
+    if (w.shared) root.appendChild(el("div", "w-note", L("Спільний рахунок для всіх слайдів з цими командами. Скидається кнопкою «Обнулити» або сам через 12 годин.", "Shared score across slides with these teams. Reset it with Reset, or it clears itself after 12 hours.")));
     copyButton(root, function () { return (w.title ? w.title + "\n" : "") + teams.map(function (t, i) { return t + ": " + pts[i]; }).join("\n"); });
     function add(i, d) { pts[i] += d; changed(); }
     function changed() {
       if (w.shared) {
-        try { localStorage.setItem(storeKey, JSON.stringify(pts)); } catch (e) { /* немає сховища */ }
+        try { localStorage.setItem(storeKey, JSON.stringify({ pts: pts, t: Date.now() })); } catch (e) { /* немає сховища */ }
         if (chan) chan.postMessage({ key: storeKey, pts: pts });
       }
       draw();
@@ -494,19 +507,21 @@
     });
     root.appendChild(grid);
     var timeEl = secs ? el("div", "w-quiz-time") : null;
-    var cd = secs ? countdown(secs, function () { timeEl.textContent = fmt(cd.left()); timeEl.classList.toggle("w-warn-text", cd.left() <= 5); }, function () { beep(2); }) : null;
+    var startB = null;
+    function syncStart() { if (startB) startB.textContent = cd.running() ? L("Пауза", "Pause") : L("Старт часу", "Start timer"); }
+    var cd = secs ? countdown(secs, function () { timeEl.textContent = fmt(cd.left()); timeEl.classList.toggle("w-warn-text", cd.left() <= 5); syncStart(); }, function () { beep(2); syncStart(); }) : null;
     if (timeEl) { root.appendChild(timeEl); timeEl.textContent = fmt(secs); }
     var revealed = false;
     function reveal() {
       revealed = !revealed;
-      if (cd && revealed) cd.pause();
+      if (cd && revealed) { cd.pause(); syncStart(); }
       items.forEach(function (it, i) {
         it.classList.toggle("w-correct", revealed && opts[i].ok);
         it.classList.toggle("w-wrong", revealed && !opts[i].ok);
       });
       revB.textContent = revealed ? L("Сховати відповідь", "Hide answer") : L("Показати відповідь", "Show answer");
     }
-    var startB = cd ? btn("", L("Старт часу", "Start timer"), function () { cd.toggle(); startB.textContent = cd.running() ? L("Пауза", "Pause") : L("Старт часу", "Start timer"); }) : null;
+    startB = cd ? btn("", L("Старт часу", "Start timer"), function () { cd.toggle(); syncStart(); }) : null;
     var revB = btn("primary", L("Показати відповідь", "Show answer"), reveal);
     root.appendChild(row(startB, revB));
     if (!opts.some(function (o) { return o.ok; })) root.appendChild(el("div", "w-note", L("Позначте правильну відповідь зірочкою * у налаштуваннях", "Mark the correct answer with * in the settings")));
@@ -613,6 +628,11 @@
   // Гарячі клавіші працюють, коли фокус у блоці (після кліку по ньому). Не чіпаємо поля вводу.
   document.addEventListener("keydown", function (e) {
     if (!active || e.ctrlKey || e.altKey || e.metaKey) return;
+    // Поки відкрита форма налаштувань, інструмент прихований і клавіші йому не належать.
+    var setupForm = document.getElementById("setup");
+    if (setupForm && !setupForm.classList.contains("hidden")) return;
+    var box = document.getElementById("widget");
+    if (box && box.classList.contains("hidden")) return;
     var t = e.target && e.target.tagName;
     if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
     if ((e.key === " " || e.key === "Enter") && t === "BUTTON") return; // кнопка сама обробить клік
