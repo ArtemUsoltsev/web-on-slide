@@ -31,6 +31,8 @@
   var ROTATE_CHOICES = [0, 10, 20, 30, 60];
   var TEMPLATES_KEY = "webOnSlide.templates"; // мої шаблони блоків, лише на цьому комп'ютері
   var KEY_WIDGET = "widget";   // JSON налаштувань інструмента тренера
+  var KEY_TIMER = "timerCfg";  // JSON налаштувань «Таймера PRO» (timer/index.html) для цього слайда
+  var TIMER_URL = "timer/index.html?embed=1&v=1.8.0";
 
   function L(uk, en) { return window.WOS_I18N ? window.WOS_I18N.L(uk, en) : uk; }
   function lang() { return window.WOS_I18N ? window.WOS_I18N.lang() : "uk"; }
@@ -50,6 +52,9 @@
   var zoomSel = $("zoom"), fxIn = $("fx"), fyIn = $("fy"), offlineIn = $("offlineText"), tabsText = $("tabsText"), mainTitle = $("mainTitle");
   var kindSel = $("kind"), siteFields = $("siteFields"), widgetFields = $("widgetFields"), widgetBox = $("widget");
   var autoplayBox = $("autoplay");
+  var timerWrap = $("timerWrap"), timerFrame = $("timerFrame");
+  var timerSaveT = null;
+  var formTimer = "";     // налаштування Таймера PRO, з якими відкрито форму (з блоку або з шаблону)
   var borderSel = $("border"), roundedBox = $("rounded"), cornerBg = $("cornerBg"), tabsBar = $("tabs"), frameZoom = $("frameZoom");
 
   var view = null;        // null (ще невідомо) | "edit" | "read" (показ слайдів)
@@ -239,7 +244,8 @@
     if (!allowed.length) return;
     var meta = document.createElement("meta");
     meta.httpEquiv = "Content-Security-Policy";
-    meta.content = "frame-src " + allowed.join(" ") + ";";
+    // 'self' — для «Таймера PRO», що лежить на цьому ж сайті (адреси сайтів зі свого домену config.js не пропускає).
+    meta.content = "frame-src 'self' " + allowed.join(" ") + ";";
     document.head.appendChild(meta);
   }
 
@@ -314,14 +320,33 @@
     if (text) (field || input).setAttribute("aria-invalid", "true");
   }
 
+  // ---------- Таймер PRO ----------
+  // Сторінка timer/index.html з цього ж сайту. Вона читає window.WOS_TIMER_HOST батьківської сторінки:
+  // cfg — налаштування цього слайда, view — редагування чи показ, save — зберегти зміни у файл.
+  function validKind(k) {
+    if (k === "protimer") return true;
+    return !!(window.WOS_WIDGETS && window.WOS_WIDGETS.kinds.indexOf(k) !== -1);
+  }
+  function unloadTimer() {
+    if (timerFrame.getAttribute("src")) timerFrame.removeAttribute("src");
+  }
+  function showTimer() {
+    window.WOS_TIMER_HOST.view = view;
+    show(timerWrap);
+    if (!timerFrame.getAttribute("src")) { timerFrame.src = TIMER_URL; return; }
+    // Перемикання редагування ↔ показ без перезавантаження: таймер, що вже йде, не скидається.
+    try { if (timerFrame.contentWindow.WOS_TIMER_VIEW) timerFrame.contentWindow.WOS_TIMER_VIEW(view); } catch (e) { /* ще вантажиться */ }
+  }
+
   function render() {
-    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar, widgetBox, notice);
+    hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar, widgetBox, notice, timerWrap);
     document.body.style.background = "";
     if (view === null) return; // не малюємо нічого, поки не знаємо режим: інакше форма блимає під час показу
 
     var showForm = !current || needsCode(current) || (editing && view === "edit");
     if (showForm) {
       unloadFrame();
+      unloadTimer();
       if (view === "edit") {
         if (current && !needsCode(current)) show($("cancelBtn")); else hide($("cancelBtn"));
         show(setup);
@@ -335,6 +360,18 @@
       }
       return;
     }
+
+    if (current.kind === "protimer") {
+      unloadFrame();
+      if (window.WOS_WIDGETS) window.WOS_WIDGETS.unmount(widgetBox);
+      showTimer();
+      if (view === "edit") {
+        hide($("reloadBtn"), $("popBtn"), $("codeBtn"));
+        show(bar);
+      }
+      return;
+    }
+    unloadTimer();
 
     if (current.kind !== "site" && window.WOS_WIDGETS) {
       unloadFrame();
@@ -475,6 +512,8 @@
   // Для кожного інструмента: які рядки форми показати і як підписати спільні поля
   // (wLines — список, wSub — вибір, wNum — число).
   var WCFG = {
+    protimer: { noTitle: true, rows: [],
+      hint: ["Усі режими великого таймера: відлік, інтервали, програма етапів, черга виступів, шаховий годинник, секундомір; 15 індикаторів і понад 70 тем. Налаштовуйте прямо в блоці після «Показати на слайді»: зміни зберігаються в цьому слайді. Під час показу видно лише циферблат.", "Every mode of the full timer: countdown, intervals, stage program, speaker queue, chess clock, stopwatch; 15 indicators and 70+ themes. Set it up right in the block after Show on slide: changes are saved in this slide. The slide show shows only the dial."] },
     timer: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wTimerRow"],
       hint: ["Клавіші після кліку по блоку: пробіл — старт/пауза, + — ще хвилина.", "Keys after clicking the block: Space start/pause, + adds a minute."] },
     "break": { title: ["Заголовок", "Heading"], titlePh: ["Перерва", "Break"], rows: ["wTimeRow"],
@@ -544,6 +583,7 @@
     if (c.sub) need.push("wSubRow");
     if (c.num) need.push("wNumRow");
     W_ROWS.forEach(function (id) { if (need.indexOf(id) !== -1) show($(id)); else hide($(id)); });
+    if (c.noTitle) hide($("wTitleLabel"), $("wTitle")); else show($("wTitleLabel"), $("wTitle"));
     $("wTitleLabel").textContent = pair(c.title);
     $("wTitle").setAttribute("placeholder", c.titlePh ? pair(c.titlePh) : "");
     if (c.lines) {
@@ -564,12 +604,13 @@
       $("wNum").min = c.num.min; $("wNum").max = c.num.max;
       if (lastKind !== kind && lastKind !== null && $("wNum").value === "") $("wNum").value = c.num.def;
     }
-    $("wHint").textContent = L("Працює без інтернету. Стан починається заново з кожним показом (крім спільного рахунку). ", "Works offline. State starts over with every show (except a shared score). ") + pair(c.hint);
+    $("wHint").textContent = kind === "protimer" ? pair(c.hint)
+      : L("Працює без інтернету. Стан починається заново з кожним показом (крім спільного рахунку). ", "Works offline. State starts over with every show (except a shared score). ") + pair(c.hint);
     lastKind = kind;
   }
   // Збирає налаштування інструмента з форми; повертає { w } або { error, field }.
   function collectWidget(kind) {
-    var c = WCFG[kind], w = { title: $("wTitle").value.trim().slice(0, 120) };
+    var c = WCFG[kind], w = kind === "protimer" ? {} : { title: $("wTitle").value.trim().slice(0, 120) };
     if (kind === "timer") {
       var m = parseFloat($("wMinutes").value);
       if (!(m >= 0.25 && m <= 180)) return { error: L("Тривалість від 0,25 до 180 хвилин.", "Duration must be 0.25–180 minutes."), field: $("wMinutes") };
@@ -644,6 +685,7 @@
   // ---------- Форма ----------
   function fillForm(cur) {
     kindSel.value = cur ? cur.kind : "site";
+    formTimer = cur && cur.timer ? cur.timer : "";
     var w = cur && cur.widget ? cur.widget : {};
     lastKind = null;
     if (cur && cur.kind !== "site") fillWidgetForm(cur.kind, w);
@@ -775,7 +817,7 @@
     var savedUrl = settings.get(KEY_URL) || "";
     var savedCode = settings.get(KEY_CODE) || "";
     var savedKind = settings.get(KEY_KIND);
-    var kind = window.WOS_WIDGETS && window.WOS_WIDGETS.kinds.indexOf(savedKind) !== -1 ? savedKind : "site";
+    var kind = validKind(savedKind) ? savedKind : "site";
     var savedWidget = null;
     try { savedWidget = JSON.parse(settings.get(KEY_WIDGET) || "null"); } catch (e) { savedWidget = null; }
     var siteOk = !!savedUrl && cfg.check(cfg.fillCode(savedUrl, savedCode || "x")).ok;
@@ -783,6 +825,7 @@
       current = {
         kind: kind,
         widget: savedWidget && typeof savedWidget === "object" ? savedWidget : {},
+        timer: String(settings.get(KEY_TIMER) || ""),
         url: siteOk ? savedUrl : "",
         code: String(savedCode),
         autoplay: settings.get(KEY_AUTOPLAY) === "1",
@@ -809,6 +852,21 @@
       updateForm();
     }
 
+    // Міст для «Таймера PRO». Під час показу зміни не пишемо у файл: бали чи ростер, змінені перед залом,
+    // живуть до кінця показу, а збережене налаштування слайда лишається таким, як його зробив автор.
+    window.WOS_TIMER_HOST = {
+      cfg: current && current.kind === "protimer" ? current.timer : "",
+      view: view,
+      save: function (json) {
+        if (view !== "edit" || !current || current.kind !== "protimer" || typeof json !== "string" || json.length > 200000) return;
+        current.timer = json;
+        window.WOS_TIMER_HOST.cfg = json;
+        settings.set(KEY_TIMER, json);
+        clearTimeout(timerSaveT);
+        timerSaveT = setTimeout(function () { settings.saveAsync(function () { /* наступна зміна спробує ще раз */ }); }, 800);
+      }
+    };
+
     var activeViewSupported = !!(req && req.isSetSupported("ActiveView", "1.1"));
     if (activeViewSupported) {
       Office.context.document.getActiveViewAsync(function (r) {
@@ -821,6 +879,8 @@
           revealed = false;
           activeTab = 0;
           if (window.WOS_WIDGETS) window.WOS_WIDGETS.unmount(widgetBox);
+          // Таймер PRO починає показ з налаштувань слайда, а не з того, що натиснули в редакторі.
+          if (current && current.kind === "protimer") { window.WOS_TIMER_HOST.cfg = current.timer; unloadTimer(); }
         }
         view = e.activeView;
         render();
@@ -864,8 +924,9 @@
       var keep = $("tplSel").value;
       editingFromTemplate = true;
       fillForm({
-        kind: window.WOS_WIDGETS && window.WOS_WIDGETS.kinds.indexOf(d.kind) !== -1 ? d.kind : "site",
-        widget: d.widget && typeof d.widget === "object" ? d.widget : {}, url: d.url || "", code: d.code || "",
+        kind: validKind(d.kind) ? d.kind : "site",
+        widget: d.widget && typeof d.widget === "object" ? d.widget : {}, timer: typeof d.timer === "string" ? d.timer : "",
+        url: d.url || "", code: d.code || "",
         autoplay: !!d.autoplay, mode: cleanMode(d.mode), scale: cleanScale(d.scale), scroll: d.scroll === "show" ? "show" : "hide",
         qrCorner: !!d.qrCorner, reveal: !!d.reveal, revealText: d.revealText || "", refresh: cleanRefresh(d.refresh),
         zoom: cleanZoom(d.zoom), fx: cleanPct(d.fx, 50), fy: cleanPct(d.fy, 0), offline: d.offline || "", tabs: cleanTabs(d.tabs),
@@ -904,6 +965,7 @@
 
     function saveAll(next) {
       settings.set(KEY_KIND, next.kind);
+      settings.set(KEY_TIMER, next.timer || "");
       settings.set(KEY_WIDGET, JSON.stringify(next.widget || {}));
       settings.set(KEY_URL, next.url);
       settings.set(KEY_CODE, next.code);
@@ -931,6 +993,8 @@
           return;
         }
         current = next;
+        window.WOS_TIMER_HOST.cfg = next.kind === "protimer" ? (next.timer || "") : "";
+        unloadTimer();
         editing = false;
         revealed = false;
         activeTab = 0;
@@ -950,7 +1014,7 @@
         var w = got.w;
         setError("");
         saveAll({
-          kind: k, widget: w, url: base.url || "", code: base.code || "", autoplay: !!base.autoplay,
+          kind: k, widget: w, timer: k === "protimer" ? (formTimer || base.timer || "") : "", url: base.url || "", code: base.code || "", autoplay: !!base.autoplay,
           mode: base.mode || "embed", scale: base.scale || 1, scroll: base.scroll || "hide", qrCorner: !!base.qrCorner,
           reveal: !!base.reveal, revealText: base.revealText || "", refresh: base.refresh || 0, zoom: base.zoom || 1,
           fx: base.fx == null ? 50 : base.fx, fy: base.fy || 0, offline: base.offline || "", tabs: base.tabs || [],
@@ -985,6 +1049,7 @@
       var next = {
         kind: "site",
         widget: {},
+        timer: "",
         url: templ,
         code: code,
         autoplay: autoplayBox.checked && modeSel.value === "embed",
