@@ -52,6 +52,8 @@
     var u;
     try { u = new URL(url); } catch (e) { result.reason = "invalid"; return result; }
     if (u.protocol !== "https:") { result.reason = "scheme"; return result; }
+    // «menti» без домену браузер перетворив би на https://menti/, і блок довго чекав би на неіснуючий сайт.
+    if (u.hostname.indexOf(".") === -1 && u.hostname !== "localhost") { result.reason = "noDomain"; return result; }
     if (u.username || u.password) { result.reason = "credentials"; return result; }
     // Власний домен надбудови в iframe з allow-same-origin зняв би sandbox і дістався до Office API.
     if (typeof location !== "undefined" && u.origin === location.origin) { result.reason = "self"; return result; }
@@ -179,6 +181,7 @@
   cfg.reasonText = {
     empty: "Введіть адресу сторінки.",
     invalid: "Це не схоже на адресу сайту.",
+    noDomain: "Схоже, адреса неповна: бракує домену. Наприклад: menti.com",
     scheme: "Потрібна адреса, що починається з https://.",
     credentials: "Адреса містить логін або пароль. Вони потраплять у файл презентації, тому така адреса не приймається.",
     self: "Не можна вставляти сторінку самої надбудови.",
@@ -189,6 +192,7 @@
   cfg.reasonTextEn = {
     empty: "Enter the page address.",
     invalid: "This doesn't look like a web address.",
+    noDomain: "The address looks incomplete: the domain is missing. For example: menti.com",
     scheme: "The address must start with https://.",
     credentials: "The address contains a login or password. They would be saved in the presentation file, so this address is not accepted.",
     self: "You can't embed the add-in's own page.",

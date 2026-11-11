@@ -67,7 +67,8 @@
         }, fallback);
       } else fallback();
     });
-    root.appendChild(row(b));
+    var r = row(b); r.classList.add("w-tools");
+    root.appendChild(r);
     root.appendChild(note);
   }
 
@@ -333,7 +334,8 @@
     });
     root.appendChild(grid);
     var resetB = btn("ghost", L("Обнулити", "Reset"), function () { pts = pts.map(function () { return 0; }); changed(); });
-    root.appendChild(row(resetB));
+    var resetRow = row(resetB); resetRow.classList.add("w-tools");
+    root.appendChild(resetRow);
     if (w.shared) root.appendChild(el("div", "w-note", L("Спільний рахунок для всіх слайдів з цими командами. Скидається кнопкою «Обнулити» або сам через 12 годин.", "Shared score across slides with these teams. Reset it with Reset, or it clears itself after 12 hours.")));
     copyButton(root, function () { return (w.title ? w.title + "\n" : "") + teams.map(function (t, i) { return t + ": " + pts[i]; }).join("\n"); });
     function add(i, d) { pts[i] += d; changed(); }
@@ -424,7 +426,9 @@
     root.appendChild(list);
     var total = el("div", "w-note");
     root.appendChild(total);
-    root.appendChild(row(btn("ghost", L("Обнулити", "Reset"), function () { votes = votes.map(function () { return 0; }); draw(); })));
+    var voteReset = row(btn("ghost", L("Обнулити", "Reset"), function () { votes = votes.map(function () { return 0; }); draw(); }));
+    voteReset.classList.add("w-tools");
+    root.appendChild(voteReset);
     copyButton(root, function () {
       var sum = votes.reduce(function (a, b) { return a + b; }, 0) || 1;
       return (w.title ? w.title + "\n" : "") + opts.map(function (o, i) { return o + ": " + votes[i] + " (" + Math.round(votes[i] * 100 / sum) + "%)"; }).join("\n");
@@ -524,7 +528,11 @@
     startB = cd ? btn("", L("Старт часу", "Start timer"), function () { cd.toggle(); syncStart(); }) : null;
     var revB = btn("primary", L("Показати відповідь", "Show answer"), reveal);
     root.appendChild(row(startB, revB));
-    if (!opts.some(function (o) { return o.ok; })) root.appendChild(el("div", "w-note", L("Позначте правильну відповідь зірочкою * у налаштуваннях", "Mark the correct answer with * in the settings")));
+    // Без позначеної відповіді кнопка нічого не покаже, а підказка потрібна лише тренерові: у показі їх не видно.
+    if (!opts.some(function (o) { return o.ok; })) {
+      revB.classList.add("w-edit-only");
+      root.appendChild(el("div", "w-note w-edit-only", L("Позначте правильну відповідь зірочкою * у налаштуваннях", "Mark the correct answer with * in the settings")));
+    }
     return {
       destroy: function () { if (cd) cd.destroy(); },
       key: function (e) {

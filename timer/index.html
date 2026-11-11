@@ -23,7 +23,7 @@
   --font-num:var(--font-display);
 }
 [data-theme="light"]{
-  --bg:#f2f5fa; --panel:#ffffff; --panel2:#f7f9fc; --line:#dfe6f0;
+  --bg:#ffffff; --panel:#ffffff; --panel2:#f7f9fc; --line:#dfe6f0;
   --txt:#121a26; --muted:#65748c; --ringbg:#e4eaf3; --shadow:0 8px 24px rgba(20,40,80,.10);
   --accent2:#6366f1;
 }
@@ -42,7 +42,7 @@
 
 /* Corporate: enterprise tokens, light surface, 8pt rhythm, restrained motion. */
 [data-theme="corporate"]{
-  --bg:#f4f6fa; --panel:#ffffff; --panel2:#f9fafc; --line:#dde3ec;
+  --bg:#ffffff; --panel:#ffffff; --panel2:#f9fafc; --line:#dde3ec;
   --txt:#111827; --muted:#55606f;
   --accent:#3b82f6; --accent2:#8b5cf6; --onAccent:#0b1220;
   --ok:#16a34a; --warn:#d97706; --danger:#dc2626;
@@ -91,9 +91,23 @@
   --ringbg:#1c1c1c; --shadow:0 10px 28px rgba(0,0,0,.6);
   --r:2px;
 }
-[data-theme="dtek"] .brand .dot{border-radius:0;background:var(--accent)}
-[data-theme="dtek"] .card{box-shadow:none}
-[data-theme="dtek"] .btn.primary{font-weight:700;letter-spacing:.3px}
+/* DTEK light: the same four colours on a white slide. Yellow on white is far
+   too faint for text, so the digits and other phase-coloured text stay black
+   and the yellow carries the ring, the bars and the primary button. */
+[data-theme="dtek-light"]{
+  --bg:#ffffff; --panel:#ffffff; --panel2:#ffffff; --line:#bcbec0;
+  --txt:#000000; --muted:#4d4d4f;
+  --accent:#ffe500; --accent2:#bcbec0; --onAccent:#000000;
+  --ok:#ffe500; --warn:#ffe500; --danger:#ffe500;
+  --ringbg:#e6e7e8; --shadow:none;
+  --r:2px;
+}
+[data-theme="dtek-light"] #timeText,[data-theme="dtek-light"] #buzzName,
+[data-theme="dtek-light"] .fd,[data-theme="dtek-light"] #rotPrompt{color:var(--txt)}
+[data-theme="dtek-light"] .tabs button.on{border-bottom-width:3px}
+[data-theme="dtek"] .brand .dot,[data-theme="dtek-light"] .brand .dot{border-radius:0;background:var(--accent)}
+[data-theme="dtek"] .card,[data-theme="dtek-light"] .card{box-shadow:none}
+[data-theme="dtek"] .btn.primary,[data-theme="dtek-light"] .btn.primary{font-weight:700;letter-spacing:.3px}
 
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -158,7 +172,7 @@ input,textarea,[contenteditable]{caret-color:var(--accent)}
 .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .modes button{
   background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 3px;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted);transition:color .15s,background-color .15s,border-color .15s,opacity .15s,transform .15s
+  display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:var(--muted);transition:color .15s,background-color .15s,border-color .15s,opacity .15s,transform .15s
 }
 .modes button svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .modes button:hover{color:var(--txt);border-color:var(--accent)}
@@ -170,6 +184,8 @@ input,textarea,[contenteditable]{caret-color:var(--accent)}
   display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none
 }
 .card>h3::after{content:"\2212";font-size:15px;color:var(--muted)}
+.cardbtn{flex:1;outline:none;border-radius:4px}
+.card>h3:has(.cardbtn:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
 .card.closed>h3::after{content:"+"}
 .card .body{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px}
 .card .body>*{flex:0 0 auto}
@@ -237,24 +253,24 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .item .inp{padding:5px 8px;border:1px solid transparent;background:transparent}
 .item .inp:focus{background:var(--panel2);border-color:var(--accent)}
 .item .dur{width:76px;flex:none;text-align:center}
-.item .col-sel{width:84px;flex:none;font-size:11px;padding:5px 4px}
+.item .col-sel{width:84px;flex:none;font-size:12px;padding:5px 4px}
 /* minutes and seconds side by side, each labelled inside the box */
 .durf{display:flex;gap:6px;align-items:center;min-width:0}
 .durbox{position:relative;display:flex;align-items:center;flex:1 1 0;min-width:56px}
 .durbox .inp{width:100%;padding-right:28px;text-align:right}
-.durbox b{position:absolute;right:9px;font-size:11px;font-weight:600;color:var(--muted);pointer-events:none}
+.durbox b{position:absolute;right:9px;font-size:12px;font-weight:600;color:var(--muted);pointer-events:none}
 .durbox .inp::-webkit-outer-spin-button,.durbox .inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.durf .at{flex:none;padding:5px 7px;font-size:11px;min-width:44px}
+.durf .at{flex:none;padding:5px 7px;font-size:12px;min-width:44px}
 .durf.compact{width:92px;flex:none;gap:4px}
 .durf.compact .durbox{min-width:34px}
 .durf.compact .inp{padding:5px 17px 5px 4px;font-size:12px}
-.durf.compact .durbox b{right:4px;font-size:10px}
+.durf.compact .durbox b{right:4px;font-size:12px}
 .atwrap{flex:none}
-.atwrap .at{padding:5px 8px;font-size:11px}
+.atwrap .at{padding:5px 8px;font-size:12px}
 .item .num{width:46px;flex:none;text-align:center;font-variant-numeric:tabular-nums}
 .item .note{font-size:12px;color:var(--muted);flex:1}
 .item .key{
-  width:20px;height:20px;flex:none;display:grid;place-items:center;font-size:11px;border-radius:5px;
+  width:20px;height:20px;flex:none;display:grid;place-items:center;font-size:12px;border-radius:5px;
   background:var(--panel2);border:1px solid var(--line);color:var(--muted)
 }
 .item .x{color:var(--muted);background:none;border:none;cursor:pointer;font-size:16px;line-height:1;padding:2px 5px;flex:none;border-radius:6px}
@@ -462,7 +478,7 @@ body.present .logo.tl,body.present .logo.tr{top:max(24px,env(safe-area-inset-top
 body.present .logo.bl,body.present .logo.br{bottom:max(24px,env(safe-area-inset-bottom))}
 body.present .logo.tl,body.present .logo.bl{left:max(20px,env(safe-area-inset-left))}
 body.present .logo.tr,body.present .logo.br{right:max(20px,env(safe-area-inset-right))}
-.score h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.score h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 .score .r{display:flex;justify-content:space-between;gap:14px;padding:4px 0;font-size:15px;align-items:center}
 .score .r b{font-variant-numeric:tabular-nums}
 .score .r.lead b{color:var(--ok)}
@@ -477,7 +493,7 @@ body.present .score .r{font-size:22px}
 .noise i{position:absolute;inset:0;background:var(--ok);border-radius:18px;transform:scaleY(0);transform-origin:bottom;transition:transform .08s linear,background .2s}
 .noise.loud i{background:var(--danger)}
 .noise b{
-  position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:11px;color:var(--muted);
+  position:absolute;left:0;right:0;bottom:6px;text-align:center;font-size:12px;color:var(--muted);
   writing-mode:vertical-rl;transform:rotate(180deg);height:auto
 }
 
@@ -511,7 +527,7 @@ body.present .score .r{font-size:22px}
 }
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
-kbd{background:var(--panel);border:1px solid var(--line);box-shadow:0 2px 0 var(--line);border-radius:5px;padding:1px 5px;font-size:11px;font-family:inherit}
+kbd{background:var(--panel);border:1px solid var(--line);box-shadow:0 2px 0 var(--line);border-radius:5px;padding:1px 5px;font-size:12px;font-family:inherit}
 .keys{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted)}
 .keys span{display:flex;gap:5px;align-items:center}
 
@@ -581,8 +597,25 @@ body.present .stagebar:hover{opacity:1}
 /* inside the add-in: no projector window, no microphone, no wake lock */
 body.embed #tbWindow,body.embed .noise,body.embed .embed-off{display:none!important}
 body.embed .stagebar{z-index:3}
-/* the add-in's own "Змінити" button sits in the top right corner while editing */
-body.embed.edit .stagebar{padding-right:112px}
+/* the add-in's own button sits in the top right corner while editing */
+body.embed.edit .stagebar{padding-right:120px;opacity:1}
+.embed-only{display:none}
+body.embed .embed-only{display:inline-flex}
+.brand .embed-only{margin-left:auto}
+/* While editing a slide the stage fills the block, exactly as in the show, and the
+   settings open as a drawer over it. A block is often 640×360 or smaller, and a
+   panel squeezed beside or above the stage left neither of them usable. */
+body.embed.edit.drawer .side{
+  display:flex;position:fixed;top:0;left:0;bottom:0;width:min(380px,94vw);max-height:none;z-index:40;
+  border-right:1px solid var(--line);border-bottom:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.28),0 10px 30px rgba(0,0,0,.3)
+}
+body.embed .app{grid-template-rows:1fr}
+/* In the slide show the trainer's buttons fade out after a few quiet seconds;
+   the mouse brings them back and the keys work all the time. */
+body.embed.idle:not(.edit) .controls,body.embed.idle:not(.edit) .stagebar .iconbtn,body.embed.idle:not(.edit) .timeline{opacity:0;transition:opacity .6s}
+/* the settings drawer exists only while editing */
+body.embed:not(.edit) #tbFull{display:none}
+body.embed:not(.idle) .controls{transition:opacity .2s}
 /* A slide block is often under 560 px tall. The rule above hides the dial for
    short windows because the side panel competes for room; in the slide show
    there is no panel, so the dial stays. */
@@ -593,14 +626,15 @@ body.embed.edit .stagebar{padding-right:112px}
 }
 </style>
 </head>
-<body data-theme="dark">
+<body data-theme="dtek-light">
 <a class="skip" href="#stage">Перейти до таймера</a>
 
 <div class="app">
   <aside class="side" aria-label="Панель налаштувань">
     <div class="brand">
       <div class="dot"></div>
-      <div><h1>Таймер<small>універсальний тайм-кіпер для занять та ігор</small></h1></div>
+      <div><h1>Таймер PRO<small>таймер для занять, ігор і тренінгів</small></h1></div>
+      <button class="iconbtn embed-only" id="drawerClose" type="button" title="Закрити налаштування (Esc)" aria-label="Закрити налаштування"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
 
     <div class="tabs" id="tabs" role="tablist" aria-label="Розділи налаштувань">
@@ -616,7 +650,7 @@ body.embed.edit .stagebar{padding-right:112px}
       <div class="pane on" data-pane="timer">
         <h2 class="sr">Таймер</h2>
         <div class="row">
-          <select class="inp" id="prSel" aria-label="Пресет заняття"><option value="">— пресет —</option></select>
+          <select class="inp" id="prSel" aria-label="Шаблон заняття"><option value="">— шаблон заняття —</option></select>
           <button class="btn sm" id="prSave" title="Зберегти як пресет">Зберегти</button>
           <button class="btn sm danger" id="prDel" aria-label="Видалити пресет" title="Видалити пресет">&times;</button>
         </div>
@@ -1254,7 +1288,7 @@ const clamp = (v,a,b)=> Math.max(a,Math.min(b,v));
 
 /* ================= config ================= */
 const DEF = {
-  title:"Тренінг", mode:"countdown", theme:"dark", vis:"disc",
+  title:"Тренінг", mode:"countdown", theme:"dtek-light", vis:"ring",
   bgFill:true, tenths:true, autoNext:true, overtime:false, loop:false,
   bells:"", bellsOver:0, protect:0, step:30, msgHold:6, warnColor:"", dangerColor:"", noRed:false,
   msgs:["Завершуйте","Час питань","Гучніше, будь ласка","Переходимо далі"],
@@ -1454,8 +1488,8 @@ function refreshPal(){
    toward black or white until it clears a contrast ratio against its own
    background, so no skill palette can ship unreadable text. Generating the
    rules beats hand-writing seventy CSS blocks nobody could maintain. */
-const TBASE = [["dark","Темна"],["light","Світла"],["dtek","ДТЕК"],["corporate","Корпоративна"],
-  ["fantasy","Фентезі"],["neon","Неон"],["mono","Контраст"]];
+const TBASE = [["dtek-light","ДТЕК світла"],["dtek","ДТЕК темна"],["light","Світла"],["dark","Темна"],["corporate","Корпоративна"],
+  ["mono","Контраст"],["neon","Неон"],["fantasy","Фентезі"]];
 /* key, name, primary, secondary, surface, text, ok, warn, danger, font, display, mono */
 const SKINS = [
   ["agentic","Агентик","#FF5701","#F6F6F1","#FFFFFF","#111827","#16A34A","#D97706","#DC2626","Playfair Display","Playfair Display","JetBrains Mono"],
@@ -1566,7 +1600,7 @@ function stack(n){
 }
 function skinVars(s){
   const surf=s[4], dark=lum(surf)<.4, ink=dark?"#ffffff":"#000000";
-  const bg     = dark ? surf : mix2(surf,s[5],.05);
+  const bg     = dark ? surf : "#ffffff";   /* light skins sit on white, like the slide */
   const panel  = dark ? mix2(surf,"#ffffff",.08) : "#ffffff";
   const panel2 = dark ? mix2(surf,"#ffffff",.05) : mix2(surf,s[5],.03);
   const line   = mix2(bg,ink,dark?.20:.14);
@@ -1591,11 +1625,20 @@ function skinVars(s){
     "font-num": DECOR.test(String(s[10]).split(",")[0]) ? stack(s[11]) : stack(s[10])
   };
 }
+/* Two skins share a key with a built-in (neon, mono); their generated rule came
+   later in the cascade and silently replaced the built-in look, so they are dropped. */
+const BASEKEY = {}; TBASE.forEach(function(b){ BASEKEY[b[0]] = 1; });
+const SKINS_OK = SKINS.filter(function(s){ return !BASEKEY[s[0]]; });
+/* Skins named after other brands and products stay working for old slides but are
+   not offered in the list: a DTEK trainer tool should not suggest them. */
+const SKIN_HIDDEN = {claude:1, sega:1, pacman:1, roku:1, ant:1, shadcn:1, stitch:1};
+/* Calm, readable skins with a plain sans for the digits: these suit a training room. */
+const SKIN_PICK = ["clean","minimal","paper","editorial","levels","material","flat","perspective","enterprise"];
 const SKMAP = {};
-SKINS.forEach(function(s){ SKMAP[s[0]] = s; });
+SKINS_OK.forEach(function(s){ SKMAP[s[0]] = s; });
 (function buildThemeCSS(){
   let css = "";
-  SKINS.forEach(function(s){
+  SKINS_OK.forEach(function(s){
     const v = skinVars(s);
     css += '[data-theme="'+s[0]+'"]{' + Object.keys(v).map(function(k){ return "--"+k+":"+v[k]; }).join(";") + "}\n";
   });
@@ -1663,7 +1706,7 @@ function applyStateColors(){
   applyScheme();
 }
 function applyTheme(k){
-  if(k!=="dark" && !SKMAP[k] && !TBASE.some(function(x){ return x[0]===k; })) k = "dark";
+  if(!SKMAP[k] && !TBASE.some(function(x){ return x[0]===k; })) k = "dtek-light";
   cfg.theme = k;
   loadThemeFonts(k);
   document.body.dataset.theme = k;
@@ -1671,13 +1714,18 @@ function applyTheme(k){
 }
 (function fillThemes(){
   const sel = $("#o_theme");
-  const g1 = document.createElement("optgroup"); g1.label = "Вбудовані";
+  const g1 = document.createElement("optgroup"); g1.label = "Для тренінгу";
   TBASE.forEach(function(b){
     const o = document.createElement("option"); o.value=b[0]; o.textContent=b[1]; g1.appendChild(o);
   });
-  const light = document.createElement("optgroup"); light.label = "Зі скілів — світлі";
-  const dark  = document.createElement("optgroup"); dark.label  = "Зі скілів — темні";
-  SKINS.slice().sort(function(a,b){ return a[1].localeCompare(b[1],"uk"); }).forEach(function(s){
+  SKIN_PICK.forEach(function(k){
+    const s = SKMAP[k]; if(!s) return;
+    const o = document.createElement("option"); o.value=s[0]; o.textContent=s[1]; g1.appendChild(o);
+  });
+  const light = document.createElement("optgroup"); light.label = "Інші світлі";
+  const dark  = document.createElement("optgroup"); dark.label  = "Інші темні";
+  SKINS_OK.slice().sort(function(a,b){ return a[1].localeCompare(b[1],"uk"); }).forEach(function(s){
+    if(SKIN_HIDDEN[s[0]] || SKIN_PICK.indexOf(s[0])!==-1) return;
     const o = document.createElement("option"); o.value=s[0]; o.textContent=s[1];
     (lum(s[4])<.4 ? dark : light).appendChild(o);
   });
@@ -3851,7 +3899,7 @@ function snapshotPreset(){
 function syncPresetBtns(){ $("#prDel").disabled = $("#prSel").value.indexOf("u:")!==0; }
 function fillPresets(){
   const sel = $("#prSel");
-  sel.innerHTML = '<option value="">— пресет —</option>';
+  sel.innerHTML = '<option value="">— шаблон заняття —</option>';
   const g1 = document.createElement("optgroup"); g1.label = "Готові";
   Object.keys(BUILTIN).forEach(function(n){ const o=document.createElement("option"); o.value="b:"+n; o.textContent=n; g1.appendChild(o); });
   sel.appendChild(g1);
@@ -3910,9 +3958,15 @@ window.addEventListener("resize", function(){ S.vizDirty = true; });
 function togglePresent(){
   /* during the slide show the side panel must never come back in front of the audience */
   if(EMBED && hostView()==="read") return;
+  if(EMBED){
+    const open = document.body.classList.toggle("drawer");
+    $("#tbFull").setAttribute("aria-expanded", open ? "true" : "false");
+    if(open){ const f = document.querySelector(".side .tabs button.on") || $("#drawerClose"); if(f) f.focus(); }
+    else $("#tbFull").focus();
+    S.vizDirty = true; setTimeout(render, 80); return;
+  }
   const on = !document.body.classList.contains("present");
   document.body.classList.toggle("present", on);
-  if(EMBED){ setTimeout(render, 80); return; }
   if(on){ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); }
   else if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function(){});
   setTimeout(render, 80);
@@ -4219,13 +4273,18 @@ $("#modes").onclick = function(e){
   setMode(b.dataset.mode);
 };
 $$(".card>h3").forEach(function(h){
-  h.setAttribute("role","button");
-  h.tabIndex = 0;
-  const sync = function(){ h.setAttribute("aria-expanded", h.parentElement.classList.contains("closed") ? "false" : "true"); };
+  /* the heading stays a heading; the button role goes on a span inside it */
+  const btn = document.createElement("span");
+  btn.className = "cardbtn";
+  while(h.firstChild) btn.appendChild(h.firstChild);
+  h.appendChild(btn);
+  btn.setAttribute("role","button");
+  btn.tabIndex = 0;
+  const sync = function(){ btn.setAttribute("aria-expanded", h.parentElement.classList.contains("closed") ? "false" : "true"); };
   /* not toggle: that name belongs to start/pause at the top of the file */
   const toggleCard = function(){ h.parentElement.classList.toggle("closed"); sync(); };
   h.onclick = toggleCard;
-  h.onkeydown = function(e){ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); toggleCard(); } };
+  btn.onkeydown = function(e){ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); toggleCard(); } };
   sync();
 });
 
@@ -4294,7 +4353,7 @@ $("#msgAdd").onclick = function(){ cfg.msgs.push("Нова репліка"); ren
 $("#msgHide").onclick = function(){ showMsg(""); };
 
 $("#styleDtek").onclick = function(){
-  cfg.theme = "dtek"; cfg.vis = "square"; cfg.bgFill = true;
+  cfg.theme = "dtek-light"; cfg.vis = "square"; cfg.bgFill = true;
   $("#o_theme").value = cfg.theme; $("#o_vis").value = cfg.vis; $("#o_bgFill").checked = true;
   applyTheme(cfg.theme); persist(); render(); toast("Стиль ДТЕК застосовано");
 };
@@ -4445,7 +4504,7 @@ document.addEventListener("keydown", function(e){
   if(e.key==="Escape"){
     if($("#stageMsg").classList.contains("on")) showMsg("");
     else if($("#ovl").classList.contains("on")) closeOvl();
-    else if(document.body.classList.contains("present")) togglePresent();
+    else if(EMBED ? document.body.classList.contains("drawer") : document.body.classList.contains("present")) togglePresent();
     return;
   }
   /* the physical key first, then the character, for keyboards the map misses */
@@ -4476,14 +4535,31 @@ if(EMBED){
   cfg.noise = false;   /* the add-in has no microphone access */
   $("#prExport").textContent = "Копіювати JSON";
   $("#logCsv").textContent = "Копіювати CSV";
-  $("#tbFull").title = "Лише циферблат, як під час показу (F)";
-  /* PowerPoint switches between editing and the slide show: the show gets the
-     stage alone, the editor gets the settings panel */
+  $("#tbFull").title = "Налаштування (F)";
+  $("#tbFull").setAttribute("aria-label", "Налаштування");
+  $("#tbFull").setAttribute("aria-expanded", "false");
+  $("#tbFull").innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>';
+  $("#drawerClose").onclick = function(){ if(document.body.classList.contains("drawer")) togglePresent(); };
+  /* a click on the stage beside the open drawer closes it */
+  $("#stage").addEventListener("pointerdown", function(e){
+    if(document.body.classList.contains("drawer") && !e.target.closest(".stagebar")) togglePresent();
+  });
+  /* PowerPoint switches between editing and the slide show. Both get the stage on
+     the whole block; the editor opens the settings as a drawer. */
   window.WOS_TIMER_VIEW = function(v){
-    document.body.classList.toggle("present", v==="read");
+    document.body.classList.add("present");
     document.body.classList.toggle("edit", v!=="read");
+    if(v==="read") document.body.classList.remove("drawer");
     S.vizDirty = true; setTimeout(render, 80);
   };
+  let idleT = 0;
+  const wake = function(){
+    document.body.classList.remove("idle");
+    clearTimeout(idleT);
+    idleT = setTimeout(function(){ document.body.classList.add("idle"); }, 3000);
+  };
+  ["pointermove","pointerdown","focusin"].forEach(function(ev){ document.addEventListener(ev, wake, true); });
+  wake();
   window.WOS_TIMER_VIEW(hostView());
 }
 applyTheme(cfg.theme);

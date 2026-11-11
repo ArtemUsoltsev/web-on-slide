@@ -32,7 +32,7 @@
   var TEMPLATES_KEY = "webOnSlide.templates"; // мої шаблони блоків, лише на цьому комп'ютері
   var KEY_WIDGET = "widget";   // JSON налаштувань інструмента тренера
   var KEY_TIMER = "timerCfg";  // JSON налаштувань «Таймера PRO» (timer/index.html) для цього слайда
-  var TIMER_URL = "timer/index.html?embed=1&v=1.8.0";
+  var TIMER_URL = "timer/index.html?embed=1&v=1.9.0";
 
   function L(uk, en) { return window.WOS_I18N ? window.WOS_I18N.L(uk, en) : uk; }
   function lang() { return window.WOS_I18N ? window.WOS_I18N.lang() : "uk"; }
@@ -291,13 +291,22 @@
     }, navigator.onLine === false ? 300 : LOAD_TIMEOUT_MS);
   }
 
-  function defaultFailText() { return L("Сторінка не відповідає. Можливо, сайт забороняє вбудовування або немає мережі.", "The page is not responding. The site may forbid embedding, or there is no network."); }
+  function setEditLabel(text, title) {
+    var b = $("editBtn");
+    b.querySelector("span").textContent = text;
+    b.title = title;
+  }
+  function defaultFailText(host) {
+    return host
+      ? L(host + " не відповідає. Сайт може забороняти показ у слайді, або немає інтернету.", host + " is not responding. The site may not allow showing it in a slide, or there is no internet.")
+      : L("Сторінка не відповідає. Сайт може забороняти показ у слайді, або немає інтернету.", "The page is not responding. The site may not allow showing it in a slide, or there is no internet.");
+  }
   function showLoadFail(url) {
     hide(loading);
     var own = current && current.offline;
-    $("loadfailText").textContent = own || defaultFailText();
+    $("loadfailText").textContent = own || defaultFailText(hostOf(url));
     $("loadfailText").style.fontSize = own ? "clamp(16px, 5vmin, 40px)" : "";
-    $("loadfailHost").textContent = own ? "" : hostOf(url);
+    $("loadfailHost").textContent = "";
     // Підказка-виправлення лише для автора, не під час показу.
     if (view === "edit" && dialogSupported) show($("loadfailToButton")); else hide($("loadfailToButton"));
     show(loadfail);
@@ -341,6 +350,9 @@
   function render() {
     hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar, widgetBox, notice, timerWrap);
     document.body.style.background = "";
+    setEditLabel(L("Змінити", "Edit"), L("Змінити адресу та вигляд", "Change address and look"));
+    // Службові написи й кнопки інструментів тренера видно лише в режимі редагування
+    document.body.classList.toggle("editing", view === "edit");
     if (view === null) return; // не малюємо нічого, поки не знаємо режим: інакше форма блимає під час показу
 
     var showForm = !current || needsCode(current) || (editing && view === "edit");
@@ -367,6 +379,8 @@
       showTimer();
       if (view === "edit") {
         hide($("reloadBtn"), $("popBtn"), $("codeBtn"));
+        // У таймера є власні налаштування, тож кнопка надбудови називається за тим, що вона відкриває
+        setEditLabel(L("Тип блоку", "Block type"), L("Змінити тип блоку", "Change block type"));
         show(bar);
       }
       return;
@@ -513,7 +527,7 @@
   // (wLines — список, wSub — вибір, wNum — число).
   var WCFG = {
     protimer: { noTitle: true, rows: [],
-      hint: ["Усі режими великого таймера: відлік, інтервали, програма етапів, черга виступів, шаховий годинник, секундомір; 15 індикаторів і понад 70 тем. Налаштовуйте прямо в блоці після «Показати на слайді»: зміни зберігаються в цьому слайді. Під час показу видно лише циферблат.", "Every mode of the full timer: countdown, intervals, stage program, speaker queue, chess clock, stopwatch; 15 indicators and 70+ themes. Set it up right in the block after Show on slide: changes are saved in this slide. The slide show shows only the dial."] },
+      hint: ["Налаштуєте прямо в блоці після «Показати на слайді»: кнопка з повзунками відкриває налаштування. Під час показу видно лише циферблат.", "Set it up right in the block after Show on slide: the sliders button opens the settings. The slide show shows only the dial."] },
     timer: { title: ["Заголовок (необов'язково)", "Heading (optional)"], rows: ["wTimerRow"],
       hint: ["Клавіші після кліку по блоку: пробіл — старт/пауза, + — ще хвилина.", "Keys after clicking the block: Space start/pause, + adds a minute."] },
     "break": { title: ["Заголовок", "Heading"], titlePh: ["Перерва", "Break"], rows: ["wTimeRow"],
@@ -604,8 +618,7 @@
       $("wNum").min = c.num.min; $("wNum").max = c.num.max;
       if (lastKind !== kind && lastKind !== null && $("wNum").value === "") $("wNum").value = c.num.def;
     }
-    $("wHint").textContent = kind === "protimer" ? pair(c.hint)
-      : L("Працює без інтернету. Стан починається заново з кожним показом (крім спільного рахунку). ", "Works offline. State starts over with every show (except a shared score). ") + pair(c.hint);
+    $("wHint").textContent = pair(c.hint);
     lastKind = kind;
   }
   // Збирає налаштування інструмента з форми; повертає { w } або { error, field }.
@@ -953,7 +966,7 @@
       if (writeTemplates(own)) {
         fillTemplates();
         $("tplSave").textContent = L("Збережено як «", "Saved as “") + name + L("»", "”");
-        setTimeout(function () { $("tplSave").textContent = L("Зберегти цей блок як шаблон", "Save this block as a template"); }, 2500);
+        setTimeout(function () { $("tplSave").textContent = L("Зберегти як шаблон", "Save as template"); }, 2500);
       }
     });
     revealBox.addEventListener("change", updateForm);
