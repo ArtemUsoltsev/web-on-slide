@@ -1,0 +1,20 @@
+Fonts bundled for Timer PRO (self-hosted copies from the @fontsource npm packages):
+
+fira-code: OFL-1.1 (@fontsource/fira-code 5.3.0)
+gelasio: OFL-1.1 (@fontsource/gelasio 5.3.0)
+ibm-plex-mono: OFL-1.1 (@fontsource/ibm-plex-mono 5.3.0)
+ibm-plex-sans: OFL-1.1 (@fontsource/ibm-plex-sans 5.3.0)
+inconsolata: OFL-1.1 (@fontsource/inconsolata 5.3.0)
+inter: OFL-1.1 (@fontsource/inter 5.3.0)
+jetbrains-mono: OFL-1.1 (@fontsource/jetbrains-mono 5.3.0)
+montserrat: OFL-1.1 (@fontsource/montserrat 5.3.0)
+new-rocker: OFL-1.1 (@fontsource/new-rocker 5.3.0)
+open-sans: OFL-1.1 (@fontsource/open-sans 5.3.0)
+oswald: OFL-1.1 (@fontsource/oswald 5.3.0)
+poppins: OFL-1.1 (@fontsource/poppins 5.3.0)
+pt-mono: OFL-1.1 (@fontsource/pt-mono 5.3.0)
+roboto: OFL-1.1 (@fontsource/roboto 5.3.0)
+ubuntu-mono: UFL-1.0 (@fontsource/ubuntu-mono 5.3.0)
+
+SIL Open Font License 1.1: https://openfontlicense.org/
+Ubuntu Font Licence 1.0: https://ubuntu.com/legal/font-licence
