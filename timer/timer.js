@@ -931,8 +931,8 @@ function blitz(sec){
 /* ================= engine ================= */
 function tickLoop(){
   cancelAnimationFrame(S.raf);
-  const f = function(){ if(!S.running) return; paced(); S.raf = requestAnimationFrame(f); };
-  S.raf = requestAnimationFrame(f);
+  /* Відлік веде таймер нижче (20 тактів на секунду); окремий покадровий цикл тут більше не потрібен. */
+  paced();
 }
 /* rAF freezes when the window is hidden or occluded, so a timer drives the
    clock too; step() reads performance.now(), so extra calls are harmless. */
@@ -2081,6 +2081,7 @@ function vizMoving(){
   return S.running || (cwEnd > 0 && performance.now() - cwEnd < 30000);
 }
 function vizLoop(t){
+  vizRaf = 0;
   if(vizMoving()) drawViz(t||0);
   else if(S.vizDirty){ S.vizDirty = false; drawViz(t||0); }
   if(cfg.noise && analyser){
@@ -2089,8 +2090,12 @@ function vizLoop(t){
     bar.style.transform = "scaleY(" + lv.toFixed(3) + ")";
     $("#noiseBox").classList.toggle("loud", lv > cfg.noiseTh);
   }
-  requestAnimationFrame(vizLoop);
+  /* Цикл кадрів іде лише поки є що малювати: PowerPoint не ховає блок, що зійшов зі слайда,
+     тож безперервний requestAnimationFrame тримав би процесор зайнятим у кожному блоці з таймером. */
+  if(vizMoving() || S.vizDirty || (cfg.noise && analyser)) vizRaf = requestAnimationFrame(vizLoop);
 }
+var vizRaf = 0;
+function vizKick(){ if(!vizRaf) vizRaf = requestAnimationFrame(vizLoop); }
 
 /* ================= flip clock ================= */
 /* A Solari board does not snap to the new character, it runs the reel through
@@ -2158,6 +2163,7 @@ function renderFlip(str){
 /* ================= render ================= */
 const CIRC = 2*Math.PI*45;
 function render(){
+  vizKick();
   if(cfg.mode==="clock"){ renderClock(); return; }
   const stage = $("#stage");
   const lay = STACKED.indexOf(cfg.vis)>=0 ? "lay-stack" : "lay-over";
@@ -2693,7 +2699,7 @@ function requestWake(){
 function releaseWake(){ if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock=null; } }
 document.addEventListener("visibilitychange", function(){ if(!document.hidden && S.running) requestWake(); });
 /* the canvas backing store is resized from its own box, and resizing clears it */
-window.addEventListener("resize", function(){ S.vizDirty = true; });
+window.addEventListener("resize", function(){ S.vizDirty = true; vizKick(); });
 
 function togglePresent(){
   /* during the slide show the side panel must never come back in front of the audience */
@@ -3308,4 +3314,4 @@ if(cfg.noise) noiseStart();
 if(!IS_DISPLAY) setInterval(function(){ if(!S.running) render(); }, 1000);
 render(); renderTimeline();
 if(IS_DISPLAY) initDisplay();
-requestAnimationFrame(vizLoop);
+vizKick();
