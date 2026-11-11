@@ -32,7 +32,7 @@
   var TEMPLATES_KEY = "webOnSlide.templates"; // мої шаблони блоків, лише на цьому комп'ютері
   var KEY_WIDGET = "widget";   // JSON налаштувань інструмента тренера
   var KEY_TIMER = "timerCfg";  // JSON налаштувань «Таймера PRO» (timer/index.html) для цього слайда
-  var TIMER_URL = "timer/index.html?embed=1&v=1.9.0";
+  var TIMER_URL = "timer/index.html?embed=1&v=1.9.1";
 
   function L(uk, en) { return window.WOS_I18N ? window.WOS_I18N.L(uk, en) : uk; }
   function lang() { return window.WOS_I18N ? window.WOS_I18N.lang() : "uk"; }
@@ -211,12 +211,37 @@
     container.appendChild(svg);
     return true;
   }
+  // Бібліотека QR (56 КБ) вантажиться лише тоді, коли блок справді показує QR-код.
+  var QR_LIB = "vendor/qrcode.js?v=1.9.1";
+  var qrLibState = typeof qrcode === "function" ? "ready" : "none"; // none | loading | ready | failed
+  var qrWaiting = [];
+  function withQrLib(cb) {
+    if (qrLibState === "ready") { cb(); return; }
+    if (qrLibState === "failed") return;
+    qrWaiting.push(cb);
+    if (qrLibState === "loading") return;
+    qrLibState = "loading";
+    var sc = document.createElement("script");
+    sc.src = QR_LIB;
+    sc.onload = function () {
+      qrLibState = typeof qrcode === "function" ? "ready" : "failed";
+      var list = qrWaiting; qrWaiting = [];
+      if (qrLibState === "ready") list.forEach(function (f) { f(); });
+    };
+    sc.onerror = function () { qrLibState = "failed"; qrWaiting = []; };
+    document.head.appendChild(sc);
+  }
+  var qrWanted = { corner: null, card: null }; // адреса, для якої QR має бути видно просто зараз
   function showQr(which, el, url) {
-    if (qrDrawnFor[which] !== url) {
+    qrWanted[which] = url;
+    if (qrDrawnFor[which] === url) { show(el); return; }
+    withQrLib(function () {
+      // Поки бібліотека вантажилась, блок могли перемкнути: малюємо лише якщо QR досі потрібен.
+      if (qrWanted[which] !== url) return;
       if (!drawQr(which === "card" ? $("qrBig") : el, url)) return;
       qrDrawnFor[which] = url;
-    }
-    show(el);
+      show(el);
+    });
   }
 
   // ---------- Фатальні стани: без office.js або поза PowerPoint ----------
@@ -349,6 +374,7 @@
 
   function render() {
     hide(frameWrap, launch, setup, bar, loadfail, fallback, loading, cover, qrCard, qrCorner, tabsBar, widgetBox, notice, timerWrap);
+    qrWanted.corner = null; qrWanted.card = null;
     document.body.style.background = "";
     setEditLabel(L("Змінити", "Edit"), L("Змінити адресу та вигляд", "Change address and look"));
     // Службові написи й кнопки інструментів тренера видно лише в режимі редагування
