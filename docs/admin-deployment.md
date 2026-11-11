@@ -27,7 +27,7 @@
 3. У `manifest.xml` замініть `https://artemusoltsev.github.io/web-on-slide/` на нову адресу в `IconUrl`, `HighResolutionIconUrl`, `SupportUrl`, `SourceLocation` (і в коментарі вгорі).
 4. Рекомендовано також:
    - згенерувати новий `<Id>` (GUID), щоб корпоративна версія не конфліктувала з пілотною, якщо хтось її вже встановив;
-   - змінити `<ProviderName>` на назву підрозділу (наприклад, «DTEK Academy»);
+   - за бажанням змінити `<ProviderName>` (зараз «Artem Usoltsev»), наприклад на «Artem Usoltsev, DTEK Academy»;
    - підняти `<Version>`.
 5. Перевірте маніфест: `npx office-addin-manifest validate manifest.xml`.
 6. Відкрийте в браузері `https://<хостинг>/help.html` (має показати інструкцію) і `https://<хостинг>/index.html` (має написати, що працює лише всередині PowerPoint).

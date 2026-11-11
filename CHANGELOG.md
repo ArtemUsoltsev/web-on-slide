@@ -6,7 +6,7 @@
 
 _Код надбудови не змінювався, маніфест і дозволи теж._
 
-- Додано `SECURITY.md`, `docs/security-review.md` (архітектура, потоки даних, дозволи, мережеві звернення, CSP, модель загроз, залишкові ризики), `docs/admin-deployment.md` (розгортання через Microsoft 365 admin center, хостинг, проксі, оновлення й відкат), `THIRD-PARTY-NOTICES.md`, `LICENSE`, `.github/CODEOWNERS`.
+- Додано `SECURITY.md`, `docs/security-review.md` (архітектура, потоки даних, дозволи, мережеві звернення, CSP, модель загроз, залишкові ризики), `docs/admin-deployment.md` (розгортання через Microsoft 365 admin center, хостинг, проксі, оновлення й відкат), `THIRD-PARTY-NOTICES.md`, `LICENSE` (MIT, автор Artem Usoltsev; особистий проєкт, безкоштовно поширюється через Академію ДТЕК), `.github/CODEOWNERS`.
 - README скорочено до огляду; історія версій перенесена сюди.
 - Прибрано `icon-80.png` (не використовувалася маніфестом, була потрібна лише для Marketplace).
 - `dialog.html` підключав `config.js` і `dialog.js` зі старим параметром кешу `?v=1.7.2`; тепер `?v=1.9.1`, як у `index.html`.
